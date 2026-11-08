@@ -13,7 +13,8 @@ This document describes the current source branch. It is not a claim that a test
 
 - WASD — move.
 - Space — jump.
-- Left mouse button (hold) — mine the selected block; the progress bar fills while held.
+- Left mouse button (hold) — mine the selected block; the progress bar fills while held. Block drops appear in the world.
+- Walk close to dropped blocks and mob loot to collect them.
 - Left mouse button — attack a nearby mob.
 - Right mouse button — place the selected block or eat the selected food.
 - T — open chat to enter commands.
@@ -38,7 +39,7 @@ Common starting progression:
 9. Use /craft cook_pork, /craft cook_beef or /craft cook_chicken near a furnace to cook meat.
 10. Use /craft wooden_sword, /craft stone_sword or /craft iron_sword near a crafting table to improve melee damage.
 
-Food is used by selecting it in the hotbar and right-clicking. The inventory picker and hotbar show stack counts.
+Food is used by selecting it in the hotbar and right-clicking. The inventory picker and hotbar show stack counts. Dropped items remain in the world when the map is saved and reloaded.
 
 ## Saving
 
@@ -46,4 +47,4 @@ Use ClassiCube's normal pause/save-level flow to save a map. The fork writes a c
 
 ## Known differences
 
-This is an early Survival implementation, not a complete Beta 1.7.3 port. It still lacks infinite Beta terrain and biomes, dropped-item pickup, a crafting-grid GUI, a timed furnace UI, armor, breeding, several mobs and other Beta features. The Windows build and gameplay still need verification.
+This is an early Survival implementation, not a complete Beta 1.7.3 port. It still lacks infinite Beta terrain and biomes, a full Minecraft-style dropped-item despawn/merge system, a crafting-grid GUI, a timed furnace UI, armor, breeding, several mobs and other Beta features. The Windows build and gameplay still need verification.
