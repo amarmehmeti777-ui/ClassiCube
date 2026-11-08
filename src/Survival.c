@@ -211,7 +211,7 @@ void Survival_OnBlockPlaced(BlockID block) {
 }
 
 #define SURVIVAL_ITEM_SLOTS 32
-#define SURVIVAL_ITEM_ENTITY_BASE SURVIVAL_MOB_SLOTS
+#define SURVIVAL_ITEM_ENTITY_BASE 16
 
 struct SurvivalItem {
 	struct Entity Base;
