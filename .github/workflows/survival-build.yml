@@ -1,0 +1,51 @@
+name: Build Survival - Windows 32-bit
+
+on:
+  push:
+    branches:
+      - survival-beta173
+  workflow_dispatch:
+
+jobs:
+  build-win32:
+    name: Build 32-bit Windows clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out Survival branch
+        uses: actions/checkout@v5
+
+      - name: Install 32-bit MinGW compiler
+        run: sudo apt-get -y install gcc-mingw-w64-i686
+
+      - name: Build Direct3D 9 client
+        shell: bash
+        run: |
+          COMMON_CFLAGS="-fno-stack-protector -DCC_NOMAIN -fno-ident"
+          COMMON_LDFLAGS="-nostartfiles -Wl,-e_main_real"
+
+          make windows clean
+          make windows RELEASE=1 TARGET=cc-w32-d3d9 CC=i686-w64-mingw32-gcc \
+            EXTRA_CFLAGS="$COMMON_CFLAGS" \
+            EXTRA_LDFLAGS="$COMMON_LDFLAGS"
+
+      - name: Build OpenGL 1.1 client
+        shell: bash
+        run: |
+          COMMON_CFLAGS="-fno-stack-protector -DCC_NOMAIN -fno-ident"
+          COMMON_LDFLAGS="-nostartfiles -Wl,-e_main_real"
+
+          make windows clean
+          make windows RELEASE=1 TARGET=cc-w32-ogl CC=i686-w64-mingw32-gcc \
+            EXTRA_CFLAGS="$COMMON_CFLAGS -DCC_GFX_BACKEND=CC_GFX_BACKEND_GL1" \
+            EXTRA_LDFLAGS="$COMMON_LDFLAGS"
+
+      - name: Upload playable Windows builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassiCube-Survival-Windows-32-bit
+          path: |
+            cc-w32-d3d9.exe
+            cc-w32-ogl.exe
+          if-no-files-found: error
+          retention-days: 14
