@@ -1,4 +1,5 @@
 #include "Screens.h"
+#include "Survival.h"
 #include "Widgets.h"
 #include "Game.h"
 #include "Event.h"
@@ -1729,6 +1730,10 @@ static void InventoryScreen_GetTitleText(cc_string* desc, BlockID block) {
 
 	name = Block_UNSAFE_GetName(block);
 	String_AppendString(desc, &name);
+	if (Survival_IsActive()) {
+		int count = Survival_GetItemCount(block);
+		if (count > 0) String_Format1(desc, " x%i", &count);
+	}
 	if (Game_ClassicMode) return;
 
 	String_Format1(desc, " (ID %i&f", &block_);
