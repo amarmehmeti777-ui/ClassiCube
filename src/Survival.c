@@ -4,6 +4,8 @@
 #include "Entity.h"
 #include "ExtMath.h"
 #include "Game.h"
+#include "Inventory.h"
+#include "Event.h"
 #include "Graphics.h"
 #include "Server.h"
 #include "World.h"
@@ -11,6 +13,8 @@
 #define SURVIVAL_MAX_HEALTH 20
 #define SURVIVAL_MAX_FOOD   20
 #define SURVIVAL_MAX_AIR    15.0f
+#define SURVIVAL_INVENTORY_STACK_SIZE 64
+#define SURVIVAL_INVENTORY_SLOTS 36
 #define SURVIVAL_TICK       0.5f
 
 static int health, food;
@@ -19,9 +23,112 @@ static float drowningTimer, hazardTimer, starvationTimer, regenerationTimer, dea
 static cc_bool fallActive, hasLastPosition, jumpWasRising;
 static float fallDistance, fallLastY, lastX, lastZ;
 static struct ScheduledTask2 survivalTask;
+static int itemCounts[BLOCK_COUNT];
 
-static cc_bool Survival_Active(void) {
+cc_bool Survival_IsActive(void) {
 	return Server.IsSinglePlayer && World.Loaded;
+}
+#define Survival_Active Survival_IsActive
+
+static int Survival_UsedInventoryStacks(void) {
+	int i, slots = 0;
+	for (i = 1; i < BLOCK_COUNT; i++) slots += (itemCounts[i] + 63) / 64;
+	return slots;
+}
+
+static void Survival_RefreshInventoryMap(void) {
+	int i;
+	for (i = 0; i < BLOCK_COUNT; i++) Inventory.Map[i] = BLOCK_AIR;
+	for (i = 1; i < BLOCK_COUNT; i++) {
+		if (itemCounts[i] > 0) Inventory.Map[i - 1] = (BlockID)i;
+	}
+}
+
+int Survival_GetItemCount(BlockID block) {
+	if (!Survival_IsActive() || block <= BLOCK_AIR || block >= BLOCK_COUNT) return 0;
+	return itemCounts[block];
+}
+
+int Survival_InventoryAdd(BlockID block, int amount) {
+	int used, freeSlots, room, capacity, i;
+	if (!Survival_IsActive() || block <= BLOCK_AIR || block >= BLOCK_COUNT || amount <= 0) return 0;
+	used = Survival_UsedInventoryStacks();
+	freeSlots = SURVIVAL_INVENTORY_SLOTS - used;
+	if (freeSlots < 0) freeSlots = 0;
+	room = itemCounts[block] % 64;
+	room = room ? 64 - room : 0;
+	capacity = room + freeSlots * 64;
+	if (amount > capacity) amount = capacity;
+	if (amount <= 0) return 0;
+
+	itemCounts[block] += amount;
+	Survival_RefreshInventoryMap();
+	for (i = 0; i < INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+		if (Inventory_Get(i) == block) return amount;
+	}
+	for (i = 0; i < INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+		if (Inventory_Get(i) != BLOCK_AIR) continue;
+		Inventory_Set(i, block);
+		Event_RaiseVoid(&UserEvents.HeldBlockChanged);
+		break;
+	}
+	return amount;
+}
+
+static int Survival_InventoryRemove(BlockID block, int amount) {
+	int i, removed, wasSelected;
+	if (!Survival_IsActive() || block <= BLOCK_AIR || block >= BLOCK_COUNT || amount <= 0) return 0;
+	if (itemCounts[block] <= 0) return 0;
+	removed = min(amount, itemCounts[block]);
+	itemCounts[block] -= removed;
+	if (itemCounts[block] == 0) {
+		wasSelected = Inventory_SelectedBlock == block;
+		for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+			if (Inventory.Table[i] == block) Inventory.Table[i] = BLOCK_AIR;
+		}
+		if (wasSelected) Event_RaiseVoid(&UserEvents.HeldBlockChanged);
+	}
+	Survival_RefreshInventoryMap();
+	return removed;
+}
+
+cc_bool Survival_CanPlaceBlock(BlockID block) {
+	if (!Survival_IsActive()) return true;
+	return block > BLOCK_AIR && block < BLOCK_COUNT && itemCounts[block] > 0;
+}
+
+void Survival_OnBlockPlaced(BlockID block) {
+	if (Survival_IsActive()) Survival_InventoryRemove(block, 1);
+}
+
+static BlockID Survival_GetBlockDrop(BlockID block) {
+	if (block == BLOCK_GRASS) return BLOCK_DIRT;
+	if (block == BLOCK_STONE) return BLOCK_COBBLE;
+	if (block == BLOCK_LEAVES) {
+		return ((int)(Game.Time * 10.0) % 5) == 0 ? BLOCK_SAPLING : BLOCK_AIR;
+	}
+	if (block == BLOCK_AIR || block == BLOCK_WATER || block == BLOCK_STILL_WATER ||
+		block == BLOCK_LAVA || block == BLOCK_STILL_LAVA || block == BLOCK_BEDROCK) return BLOCK_AIR;
+	return block;
+}
+
+void Survival_OnBlockBroken(BlockID block) {
+	BlockID drop;
+	if (!Survival_IsActive()) return;
+	drop = Survival_GetBlockDrop(block);
+	if (drop != BLOCK_AIR) Survival_InventoryAdd(drop, 1);
+}
+
+static void Survival_OnNewMap(void) {
+	int i;
+	if (!Server.IsSinglePlayer) return;
+	Survival_Reset();
+	Mem_Set(itemCounts, 0, sizeof(itemCounts));
+	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) Inventory.Table[i] = BLOCK_AIR;
+	Inventory.SelectedIndex = 0;
+	Inventory.Offset = 0;
+	Survival_RefreshInventoryMap();
+	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
 }
 
 int Survival_GetHealth(void) { return health; }
@@ -287,7 +394,7 @@ struct IGameComponent Survival_Component = {
 	Survival_Init,
 	Survival_Free,
 	Survival_Reset,
-	Survival_Reset,
-	Survival_Reset,
+	Survival_OnNewMap,
+	NULL,
 	NULL
 };

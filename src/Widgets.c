@@ -18,6 +18,37 @@
 #include "Input.h"
 #include "InputHandler.h"
 #include "Launcher.h"
+#include "Survival.h"
+
+static void Survival_DrawDigit(int x, int y, int digit) {
+	static const cc_uint8 rows[10][5] = {
+		{ 7,5,5,5,7 }, { 2,6,2,2,7 }, { 7,1,7,4,7 }, { 7,1,7,1,7 }, { 5,5,7,1,1 },
+		{ 7,4,7,1,7 }, { 7,4,7,5,7 }, { 7,1,1,1,1 }, { 7,5,7,5,7 }, { 7,5,7,1,7 }
+	};
+	int row, col;
+	PackedCol shadow = PackedCol_Make(0, 0, 0, 255);
+	PackedCol white = PackedCol_Make(255, 255, 255, 255);
+	for (row = 0; row < 5; row++) {
+		for (col = 0; col < 3; col++) {
+			if (!(rows[digit][row] & (1 << (2 - col)))) continue;
+			Gfx_Draw2DFlat(x + col * 2 + 1, y + row * 2 + 1, 2, 2, shadow);
+			Gfx_Draw2DFlat(x + col * 2, y + row * 2, 2, 2, white);
+		}
+	}
+}
+
+void Survival_RenderItemCount(int x, int y, BlockID block) {
+	int count = Survival_GetItemCount(block);
+	if (count <= 0) return;
+	if (count > 99) count = 99;
+	Gfx_Draw2DFlat(x - 1, y - 1, 16, 12, PackedCol_Make(0, 0, 0, 170));
+	if (count >= 10) {
+		Survival_DrawDigit(x, y, count / 10);
+		Survival_DrawDigit(x + 7, y, count % 10);
+	} else {
+		Survival_DrawDigit(x + 7, y, count);
+	}
+}
 
 static void Widget_NullFunc(void* widget) { }
 static int  Widget_Pointer(void* elem, int id, int x, int y) { return false; }
@@ -485,6 +516,14 @@ static int HotbarWidget_Render2(void* widget, int offset) {
 
 	HotbarWidget_RenderOutline(w, offset    );
 	HotbarWidget_RenderEntries(w, offset + 8);
+	if (Survival_IsActive()) {
+		int i;
+		for (i = 0; i < INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+			int x = HotbarWidget_TileX(w, i) + 2;
+			int y = w->y + w->height - 12;
+			Survival_RenderItemCount(x, y, Inventory_Get(i));
+		}
+	}
 
 	if (Gui_TouchUI) {
 		w->ellipsisTex.x = HotbarWidget_TileX(w, HOTBAR_MAX_INDEX) - w->ellipsisTex.width / 2;

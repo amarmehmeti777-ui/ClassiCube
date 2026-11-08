@@ -25,6 +25,7 @@
 #include "Protocol.h"
 #include "AxisLinesRenderer.h"
 #include "Picking.h"
+#include "Survival.h"
 
 static cc_bool input_buttonsDown[3];
 static int input_pickingId = -1;
@@ -415,6 +416,7 @@ static void InputHandler_DeleteBlock(void) {
 	if (Blocks.Draw[old] == DRAW_GAS || !Blocks.CanDelete[old]) return;
 
 	Game_ChangeBlock(pos.x, pos.y, pos.z, BLOCK_AIR);
+	Survival_OnBlockBroken(old);
 	Event_RaiseBlock(&UserEvents.BlockChanged, pos, old, BLOCK_AIR);
 }
 
@@ -429,6 +431,7 @@ static void InputHandler_PlaceBlock(void) {
 	if (AutoRotate_Enabled) block = AutoRotate_RotateBlock(block);
 
 	if (Game_CanPick(old) || !Blocks.CanPlace[block]) return;
+	if (!Survival_CanPlaceBlock(block)) return;
 	/* air-ish blocks can only replace over other air-ish blocks */
 	if (Blocks.Draw[block] == DRAW_GAS && Blocks.Draw[old] != DRAW_GAS) return;
 
@@ -438,6 +441,7 @@ static void InputHandler_PlaceBlock(void) {
 	if (!CheckIsFree(block)) return;
 
 	Game_ChangeBlock(pos.x, pos.y, pos.z, block);
+	Survival_OnBlockPlaced(block);
 	Event_RaiseBlock(&UserEvents.BlockChanged, pos, old, block);
 }
 
