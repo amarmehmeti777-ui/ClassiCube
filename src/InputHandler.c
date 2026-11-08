@@ -410,7 +410,10 @@ static void InputHandler_DeleteBlock(float elapsed) {
 	HeldBlockRenderer_ClickAnim(true);
 
 	pos = Game_SelectedPos.pos;
-	if (!Game_SelectedPos.valid || !World_Contains(pos.x, pos.y, pos.z)) return;
+	if (!Game_SelectedPos.valid || !World_Contains(pos.x, pos.y, pos.z)) {
+		Survival_CancelMining();
+		return;
+	}
 
 	old = World_GetBlock(pos.x, pos.y, pos.z);
 	if (Blocks.Draw[old] == DRAW_GAS || !Blocks.CanDelete[old]) {
