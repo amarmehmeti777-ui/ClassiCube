@@ -374,8 +374,12 @@ static void Survival_SpawnNightMob(void);
 
 static void Survival_OnNewMap(void) {
 	int i;
-	/* Do not clear Classic's normal hotbar when loading a Classic singleplayer map. */
+	/* Do not change Classic or multiplayer maps. */
 	if (!Server.IsSinglePlayer || Game_ClassicMode) return;
+#ifndef CC_BUILD_TINYMEM
+	/* Define custom block IDs before the map data is decoded. */
+	Survival_DefineVirtualItems();
+#endif
 	SurvivalMob_ClearAll();
 	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
@@ -1282,19 +1286,8 @@ cc_bool Survival_AttackMob(void) {
 }
 
 static void Survival_OnNewMapLoaded(void) {
-	int i;
 	if (!Survival_IsActive()) return;
-#ifndef CC_BUILD_TINYMEM
-	Survival_DefineVirtualItems();
-#endif
-	/* Clear default entries appended by custom block registration before loading Survival inventory. */
-	Mem_Set(itemCounts, 0, sizeof(itemCounts));
-	Mem_Set(toolDurability, 0, sizeof(toolDurability));
-	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) Inventory.Table[i] = BLOCK_AIR;
-	Inventory.SelectedIndex = 0;
-	Inventory.Offset = 0;
 	Survival_RefreshInventoryMap();
-	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
 	SurvivalMob_ClearAll();
 	Survival_SpawnInitialAnimals();
 	Chat_AddRaw("&aSurvival Mode enabled. Use /client craft help for recipes.");
