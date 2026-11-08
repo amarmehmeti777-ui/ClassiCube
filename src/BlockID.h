@@ -82,6 +82,30 @@ enum BLOCKID {
 	/* Max block ID used in original classic plus CPE blocks. */
 	BLOCK_MAX_CPE = BLOCK_STONE_BRICK,
 
+	/* Local singleplayer Survival item and block IDs (not sent to multiplayer servers). */
+	BLOCK_ITEM_APPLE          = 66,
+	BLOCK_ITEM_STICK          = 67,
+	BLOCK_ITEM_BREAD          = 68,
+	BLOCK_ITEM_RAW_PORK       = 69,
+	BLOCK_ITEM_COOKED_PORK    = 70,
+	BLOCK_ITEM_RAW_BEEF       = 71,
+	BLOCK_ITEM_COOKED_BEEF    = 72,
+	BLOCK_ITEM_RAW_CHICKEN    = 73,
+	BLOCK_ITEM_COOKED_CHICKEN = 74,
+	BLOCK_ITEM_CRAFTING_TABLE = 75,
+	BLOCK_ITEM_FURNACE        = 76,
+	BLOCK_ITEM_TORCH          = 77,
+	BLOCK_ITEM_WOOD_PICKAXE   = 78,
+	BLOCK_ITEM_STONE_PICKAXE  = 79,
+	BLOCK_ITEM_WOOD_AXE       = 80,
+	BLOCK_ITEM_STONE_AXE      = 81,
+	BLOCK_ITEM_WOOD_SHOVEL    = 82,
+	BLOCK_ITEM_STONE_SHOVEL   = 83,
+	BLOCK_ITEM_WHEAT          = 84,
+	BLOCK_ITEM_SEEDS          = 85,
+
+
+
 #if defined EXTENDED_BLOCKS
 	BLOCK_MAX_DEFINED = 0x2FF,
 #elif defined CC_BUILD_TINYMEM
