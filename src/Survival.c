@@ -349,7 +349,8 @@ static void Survival_SpawnNightMob(void);
 
 static void Survival_OnNewMap(void) {
 	int i;
-	if (!Server.IsSinglePlayer) return;
+	/* Do not clear Classic's normal hotbar when loading a Classic singleplayer map. */
+	if (!Server.IsSinglePlayer || Game_ClassicMode) return;
 	SurvivalMob_ClearAll();
 	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
@@ -1257,14 +1258,14 @@ static void Survival_RenderHUD(float delta) {
 
 static void Survival_ComponentReset(void) {
 #ifndef CC_BUILD_TINYMEM
-	Survival_DefineVirtualItems();
+	if (!Game_ClassicMode) Survival_DefineVirtualItems();
 #endif
 	Survival_Reset();
 }
 
 static void Survival_Init(void) {
 #ifndef CC_BUILD_TINYMEM
-	Survival_DefineVirtualItems();
+	if (!Game_ClassicMode) Survival_DefineVirtualItems();
 #endif
 	Random_SeedFromCurrentTime(&survivalRng);
 	Survival_Reset();
