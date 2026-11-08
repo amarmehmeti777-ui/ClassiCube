@@ -23,6 +23,7 @@
 #include "Utils.h"
 #include "EntityRenderers.h"
 #include "Protocol.h"
+#include "Survival.h"
 
 const char* const NameMode_Names[NAME_MODE_COUNT]   = { "None", "Hovered", "All", "AllHovered", "AllUnscaled" };
 const char* const ShadowMode_Names[SHADOW_MODE_COUNT] = { "None", "SnapToBlock", "Circle", "CircleAll" };
@@ -728,6 +729,7 @@ static void LocalPlayer_Tick(struct Entity* e, float delta) {
 	Vec3 headingVelocity;
 
 	if (!World.Loaded) return;
+	if (Survival_IsDead()) { Vec3_Set(e->Velocity, 0.0f, 0.0f, 0.0f); return; }
 	p->Collisions.StepSize = hacks->FullBlockStep && hacks->Enabled && hacks->CanSpeed ? 1.0f : 0.5f;
 	p->OldVelocity = e->Velocity;
 	wasOnGround    = e->OnGround;
@@ -748,6 +750,7 @@ static void LocalPlayer_Tick(struct Entity* e, float delta) {
 
 	/* Fixes high jump, when holding down a movement key, jump, fly, then let go of fly key */
 	if (p->Hacks.Floating) e->Velocity.y = 0.0f;
+	Survival_OnPlayerPhysics(p);
 
 	e->next.pos = e->Position; e->Position = e->prev.pos;
 	AnimatedComp_Update(e, e->prev.pos, e->next.pos, delta);

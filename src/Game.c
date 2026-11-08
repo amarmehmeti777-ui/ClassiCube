@@ -21,6 +21,7 @@
 #include "Particle.h"
 #include "Http.h"
 #include "Inventory.h"
+#include "Survival.h"
 #include "Input.h"
 #include "InputHandler.h"
 #include "Server.h"
@@ -430,6 +431,7 @@ static void Game_Load(void) {
 	Game_AddComponent(&Server_Component);
 	Game_AddComponent(&Protocol_Component);
 	Game_AddComponent(&Entities_Component);
+	Game_AddComponent(&Survival_Component);
 
 	Game_AddComponent(&Gui_Component);
 	Game_AddComponent(&Selections_Component);
