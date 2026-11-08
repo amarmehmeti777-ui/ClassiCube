@@ -53,6 +53,11 @@ static void Survival_DefineVirtualItem(BlockID id, const char* name, BlockID tem
 	for (face = 0; face < FACE_COUNT; face++) {
 		Block_Tex(id, face) = Block_Tex(templateBlock, face);
 	}
+	/* Preserve the template's light-emission and sprite properties. In particular,
+	   the crafted torch uses BLOCK_FIRE as its visual/light template. */
+	Blocks.Brightness[id] = Blocks.Brightness[templateBlock];
+	Blocks.BlocksLight[id] = Blocks.BlocksLight[templateBlock];
+	Blocks.SpriteOffset[id] = Blocks.SpriteOffset[templateBlock];
 	Blocks.Draw[id] = solid ? DRAW_OPAQUE : DRAW_SPRITE;
 	Blocks.Collide[id] = solid ? COLLIDE_SOLID : COLLIDE_NONE;
 	Block_DefineCustom(id, true);
