@@ -144,7 +144,7 @@ static cc_bool Survival_Tick(struct ScheduledTask2* task) {
 		starvationTimer += dt;
 		if (starvationTimer >= 4.0f) {
 			starvationTimer -= 4.0f;
-			if (health > 2) Survival_Damage(1);
+			if (health > 1) Survival_Damage(1);
 		}
 	} else {
 		starvationTimer = 0.0f;
@@ -221,14 +221,14 @@ void Survival_OnPlayerPhysics(struct LocalPlayer* player) {
 		dx = entity->Position.x - lastX;
 		dz = entity->Position.z - lastZ;
 		distance = Math_SqrtF(dx * dx + dz * dz);
-		if (distance > 0.02f && distance < 1.5f) exhaustion += distance * 0.1f;
+		if (distance > 0.02f && distance < 1.5f) exhaustion += distance * 0.01f;
 	}
 	lastX = entity->Position.x;
 	lastZ = entity->Position.z;
 	hasLastPosition = true;
 
 	if (entity->Velocity.y > 0.2f) {
-		if (!jumpWasRising) exhaustion += 0.2f;
+		if (!jumpWasRising) exhaustion += 0.05f;
 		jumpWasRising = true;
 	} else if (entity->Velocity.y <= 0.0f) {
 		jumpWasRising = false;
@@ -252,6 +252,7 @@ static void Survival_DrawMeter(int x, int y, int value, PackedCol fill) {
 
 static void Survival_RenderHUD(float delta) {
 	int y, foodX;
+	(void)delta;
 	PackedCol healthCol = PackedCol_Make(210, 45, 45, 255);
 	PackedCol foodCol = PackedCol_Make(222, 158, 45, 255);
 	PackedCol airCol = PackedCol_Make(65, 150, 220, 255);
