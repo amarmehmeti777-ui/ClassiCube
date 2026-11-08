@@ -24,20 +24,20 @@ This document describes the current source branch. It is not a claim that a test
 
 ## Crafting
 
-Open chat and enter /craft help to see the recipes.
+Open chat and enter `/client craft help` to see the recipes.
 
 Common starting progression:
 
 1. Mine tree logs.
-2. Enter /craft planks to make planks.
-3. Enter /craft sticks to make sticks.
-4. Enter /craft table, then place the crafting table.
-5. Mine stone with a pickaxe and make a furnace with /craft furnace.
-6. Use /craft wooden_pickaxe, /craft stone_pickaxe, and later /craft iron_pickaxe near a crafting table.
+2. Enter `/client craft planks to make planks.
+3. Enter `/client craft sticks to make sticks.
+4. Enter `/client craft table, then place the crafting table.
+5. Mine stone with a pickaxe and make a furnace with `/client craft furnace.
+6. Use /client craft wooden_pickaxe, /client craft stone_pickaxe, and later /client craft iron_pickaxe` near a crafting table.
 7. Mine coal, iron ore and gold ore with the required pickaxe tier.
-8. Use /craft smelt_iron or /craft smelt_gold near a furnace. These commands consume coal immediately.
-9. Use /craft cook_pork, /craft cook_beef or /craft cook_chicken near a furnace to cook meat.
-10. Use /craft wooden_sword, /craft stone_sword or /craft iron_sword near a crafting table to improve melee damage.
+8. Use /client craft smelt_iron or /client craft smelt_gold near a furnace. These` commands consume coal immediately.
+9. Use /client craft cook_pork, /client craft cook_beef or /client craft cook_chicken near a furnace to cook meat.
+10. Use /client craft wooden_sword, /client craft stone_sword or /client craft iron_sword` near a crafting table to improve melee damage.
 
 Food is used by selecting it in the hotbar and right-clicking. The inventory picker and hotbar show stack counts. Dropped items remain in the world when the map is saved and reloaded.
 
