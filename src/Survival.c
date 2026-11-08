@@ -31,6 +31,7 @@ static float drowningTimer, hazardTimer, starvationTimer, regenerationTimer, dea
 static cc_bool fallActive, hasLastPosition, jumpWasRising;
 static float fallDistance, fallLastY, lastX, lastZ;
 static struct ScheduledTask2 survivalTask;
+static float hostileSpawnTimer;
 static int itemCounts[BLOCK_COUNT];
 static int toolDurability[BLOCK_COUNT];
 static RNGState survivalRng;
@@ -914,7 +915,6 @@ struct SurvivalMob {
 
 static struct SurvivalMob survivalMobs[SURVIVAL_MOB_SLOTS];
 static void SurvivalMob_Tick(struct Entity* e, float delta);
-static float hostileSpawnTimer;
 
 static cc_bool SurvivalMob_IsHostile(const struct SurvivalMob* mob) {
 	return mob->type >= SURVIVAL_MOB_ZOMBIE;
