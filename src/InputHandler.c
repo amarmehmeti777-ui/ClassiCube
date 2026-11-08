@@ -435,6 +435,7 @@ static void InputHandler_PlaceBlock(void) {
 
 	old   = World_GetBlock(pos.x, pos.y, pos.z);
 	block = Inventory_SelectedBlock;
+	if (Survival_UseItem(block)) return;
 	if (AutoRotate_Enabled) block = AutoRotate_RotateBlock(block);
 
 	if (Game_CanPick(old) || !Blocks.CanPlace[block]) return;
