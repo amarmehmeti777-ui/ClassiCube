@@ -28,7 +28,7 @@ This branch adds a lightweight, local singleplayer Survival layer to ClassiCube.
 - Wooden, stone and iron tools and swords have durability.
 
 ### Crafting and smelting
-- Crafting uses the /craft chat command and checks for a nearby crafting table/furnace when required.
+- Crafting uses the /client craft chat command and checks for a nearby crafting table/furnace when required.
 - Recipes include planks, sticks, crafting table, furnace, torches, wooden/stone/iron tools, swords, iron/gold ingots, and cooked meat.
 - Smelting/cooking commands consume one coal immediately; there is not yet a timed furnace interface.
 
