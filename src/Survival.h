@@ -2,6 +2,7 @@
 #define CC_SURVIVAL_H
 #include "Core.h"
 #include "BlockID.h"
+#include "String_.h"
 CC_BEGIN_HEADER
 
 struct LocalPlayer;
@@ -25,6 +26,8 @@ void Survival_AddFood(int foodPoints, float saturation);
 void Survival_AddExhaustion(float amount);
 void Survival_OnPlayerPhysics(struct LocalPlayer* player);
 void Survival_Reset(void);
+cc_result Survival_Save(const cc_string* mapPath);
+cc_result Survival_Load(const cc_string* mapPath);
 
 CC_END_HEADER
 #endif

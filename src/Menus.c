@@ -37,6 +37,7 @@
 #include "Lighting.h"
 #include "InputHandler.h"
 #include "Protocol.h"
+#include "Survival.h"
 
 /*########################################################################################################################*
 *--------------------------------------------------------Menu base--------------------------------------------------------*
@@ -1398,6 +1399,7 @@ static cc_result SaveLevelScreen_SaveMap(const cc_string* path) {
 	res = DoSaveMap(path, state);
 	Mem_Free(state);
 	if (res) return res;
+	if ((res = Survival_Save(path))) return res;
 
 	World.LastSave = Game.Time;
 	Gui_ShowPauseMenu();
@@ -1818,6 +1820,7 @@ static void LoadLevelScreen_EntryClick(void* screen, void* widget) {
 	String_InitArray(path, pathBuffer);
 	String_Format1(&path, "maps/%s", &relPath);
 	res = Map_LoadFrom(&path);
+	if (!res) Survival_Load(&path);
 
 	/* FileNotFound error may be because user deleted maps from disc */
 	if (res != ReturnCode_FileNotFound) return;
@@ -1843,7 +1846,9 @@ static void LoadLevelScreen_LoadEntries(struct ListScreen* s) {
 	StringsBuffer_Sort(&s->entries);
 }
 
-static void LoadLevelScreen_UploadCallback(const cc_string* path) { Map_LoadFrom(path); }
+static void LoadLevelScreen_UploadCallback(const cc_string* path) {
+	if (!Map_LoadFrom(path)) Survival_Load(path);
+}
 static void LoadLevelScreen_ActionFunc(void* s, void* w) {
 	static const char* const filters[] = { 
 		".cw", ".dat", ".lvl", ".mine", ".fcm", ".mclevel", NULL 

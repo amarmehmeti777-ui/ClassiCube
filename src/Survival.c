@@ -6,6 +6,10 @@
 #include "Game.h"
 #include "Inventory.h"
 #include "Event.h"
+#include "Errors.h"
+#include "String_.h"
+#include "Platform.h"
+#include "Stream.h"
 #include "Graphics.h"
 #include "Server.h"
 #include "World.h"
@@ -26,7 +30,7 @@ static struct ScheduledTask2 survivalTask;
 static int itemCounts[BLOCK_COUNT];
 
 cc_bool Survival_IsActive(void) {
-	return Server.IsSinglePlayer && World.Loaded;
+	return Server.IsSinglePlayer && !Game_ClassicMode && World.Loaded;
 }
 #define Survival_Active Survival_IsActive
 
@@ -130,6 +134,152 @@ static void Survival_OnNewMap(void) {
 	Survival_RefreshInventoryMap();
 	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
 }
+
+
+/* Stores Survival state beside the corresponding map as <map>.survival. */
+static cc_result Survival_MakeSidecarPath(cc_string* path, char* buffer, const cc_string* mapPath) {
+	if (!mapPath || !mapPath->length || mapPath->length + 10 >= FILENAME_SIZE) return ERR_INVALID_ARGUMENT;
+	path->buffer = buffer;
+	path->length = 0;
+	path->capacity = FILENAME_SIZE;
+	String_AppendString(path, mapPath);
+	String_AppendConst(path, ".survival");
+	return 0;
+}
+
+cc_result Survival_Save(const cc_string* mapPath) {
+	struct Stream stream;
+	cc_filepath rawPath;
+	cc_string path;
+	char pathBuffer[FILENAME_SIZE];
+	cc_uint8 data[12 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	int i, itemTypes = 0, offset = 12;
+	cc_result res;
+
+	if (!Survival_IsActive()) return 0;
+	if ((res = Survival_MakeSidecarPath(&path, pathBuffer, mapPath))) return res;
+
+	for (i = 1; i < BLOCK_COUNT; i++) {
+		if (itemCounts[i] > 0) itemTypes++;
+	}
+	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
+	data[4] = 1;
+	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
+	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
+	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
+	data[8] = (cc_uint8)max(0, min((int)(saturation + 0.5f), SURVIVAL_MAX_FOOD));
+	data[9] = (cc_uint8)min(itemTypes, SURVIVAL_INVENTORY_SLOTS);
+	data[10] = (cc_uint8)max(0, min(Inventory.SelectedIndex, HOTBAR_MAX_INDEX));
+	data[11] = (cc_uint8)max(0, min(Inventory.Offset / INVENTORY_BLOCKS_PER_HOTBAR, INVENTORY_HOTBARS - 1));
+
+	itemTypes = 0;
+	for (i = 1; i < BLOCK_COUNT && itemTypes < data[9]; i++) {
+		cc_uint16 block, count;
+		if (itemCounts[i] <= 0) continue;
+		block = (cc_uint16)i;
+		count = (cc_uint16)min(itemCounts[i], SURVIVAL_INVENTORY_SLOTS * SURVIVAL_INVENTORY_STACK_SIZE);
+		data[offset++] = (cc_uint8)(block & 0xFF);
+		data[offset++] = (cc_uint8)(block >> 8);
+		data[offset++] = (cc_uint8)(count & 0xFF);
+		data[offset++] = (cc_uint8)(count >> 8);
+		itemTypes++;
+	}
+
+	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+		cc_uint16 block = (cc_uint16)Inventory.Table[i];
+		data[offset++] = (cc_uint8)(block & 0xFF);
+		data[offset++] = (cc_uint8)(block >> 8);
+	}
+
+	Platform_EncodePath(&rawPath, &path);
+	res = Stream_CreatePath(&stream, &rawPath);
+	if (res) return res;
+	res = Stream_Write(&stream, data, (cc_uint32)offset);
+	if (res) {
+		stream.Close(&stream);
+		return res;
+	}
+	return stream.Close(&stream);
+}
+
+cc_result Survival_Load(const cc_string* mapPath) {
+	struct Stream stream;
+	cc_filepath rawPath;
+	cc_string path;
+	char pathBuffer[FILENAME_SIZE];
+	cc_uint8 data[12 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	cc_uint32 payloadSize;
+	int i, offset, stackSlots = 0;
+	cc_result res;
+
+	if (!Survival_IsActive()) return 0;
+	if ((res = Survival_MakeSidecarPath(&path, pathBuffer, mapPath))) return res;
+	Platform_EncodePath(&rawPath, &path);
+	res = Stream_OpenPath(&stream, &rawPath);
+	/* Older maps have no companion file; keep their fresh Survival state. */
+	if (res) return 0;
+
+	res = Stream_Read(&stream, data, 12);
+	if (res) {
+		stream.Close(&stream);
+		return res;
+	}
+	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
+		data[4] != 1 || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
+		stream.Close(&stream);
+		return ERR_INVALID_ARGUMENT;
+	}
+
+	payloadSize = (cc_uint32)data[9] * 4U +
+		(cc_uint32)INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2U;
+	res = Stream_Read(&stream, data + 12, payloadSize);
+	if (res) {
+		stream.Close(&stream);
+		return res;
+	}
+	res = stream.Close(&stream);
+	if (res) return res;
+
+	Mem_Set(itemCounts, 0, sizeof(itemCounts));
+	health = min((int)data[5], SURVIVAL_MAX_HEALTH);
+	food = min((int)data[6], SURVIVAL_MAX_FOOD);
+	if (health == 0) health = SURVIVAL_MAX_HEALTH;
+	airSeconds = min((float)data[7], SURVIVAL_MAX_AIR);
+	saturation = min((float)data[8], (float)food);
+	exhaustion = 0.0f;
+	drowningTimer = hazardTimer = starvationTimer = regenerationTimer = deathTimer = 0.0f;
+	fallActive = hasLastPosition = jumpWasRising = false;
+	fallDistance = fallLastY = lastX = lastZ = 0.0f;
+
+	offset = 12;
+	for (i = 0; i < data[9]; i++) {
+		cc_uint16 block = (cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8));
+		cc_uint16 amount = (cc_uint16)(data[offset + 2] | ((cc_uint16)data[offset + 3] << 8));
+		offset += 4;
+		if (block == BLOCK_AIR || block >= BLOCK_COUNT || amount == 0) continue;
+		itemCounts[block] = min((int)amount, SURVIVAL_INVENTORY_SLOTS * SURVIVAL_INVENTORY_STACK_SIZE);
+		stackSlots += (itemCounts[block] + SURVIVAL_INVENTORY_STACK_SIZE - 1) / SURVIVAL_INVENTORY_STACK_SIZE;
+	}
+	if (stackSlots > SURVIVAL_INVENTORY_SLOTS) {
+		Mem_Set(itemCounts, 0, sizeof(itemCounts));
+		Survival_Reset();
+		return ERR_INVALID_ARGUMENT;
+	}
+
+	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+		cc_uint16 block = (cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8));
+		offset += 2;
+		if (block >= BLOCK_COUNT || (block && itemCounts[block] <= 0)) block = BLOCK_AIR;
+		Inventory.Table[i] = (BlockID)block;
+	}
+	Inventory.SelectedIndex = data[10];
+	Inventory.Offset = data[11] * INVENTORY_BLOCKS_PER_HOTBAR;
+	Survival_RefreshInventoryMap();
+	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
+	return 0;
+}
+
 
 int Survival_GetHealth(void) { return health; }
 int Survival_GetFood(void)   { return food; }
