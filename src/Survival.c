@@ -4,6 +4,8 @@
 #include "Commands.h"
 #include "Chat.h"
 #include "Entity.h"
+#include "Model.h"
+#include "EntityComponents.h"
 #include "ExtMath.h"
 #include "Game.h"
 #include "Inventory.h"
@@ -340,6 +342,7 @@ void Survival_OnBlockBroken(BlockID block) {
 static void Survival_OnNewMap(void) {
 	int i;
 	if (!Server.IsSinglePlayer) return;
+	SurvivalMob_ClearAll();
 	Survival_Reset();
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
@@ -646,6 +649,15 @@ static cc_bool Survival_Tick(struct ScheduledTask2* task) {
 	const float dt = task->interval;
 	if (!Server.IsSinglePlayer || !World.Loaded) return true;
 	Survival_UpdateDayNight(dt);
+	if (Survival_IsNight()) {
+		hostileSpawnTimer += dt;
+		if (hostileSpawnTimer >= 12.0f && SurvivalMob_Count(true) < 5) {
+			hostileSpawnTimer = 0.0f;
+			Survival_SpawnNightMob();
+		}
+	} else {
+		hostileSpawnTimer = 0.0f;
+	}
 
 	if (health <= 0) {
 		deathTimer -= dt;
@@ -868,6 +880,314 @@ static struct ChatCommand SurvivalCraftCommand = {
 	}
 };
 
+
+#define SURVIVAL_MOB_SLOTS 16
+#define SURVIVAL_MOB_PIG 0
+#define SURVIVAL_MOB_CHICKEN 1
+#define SURVIVAL_MOB_SHEEP 2
+#define SURVIVAL_MOB_ZOMBIE 3
+#define SURVIVAL_MOB_SKELETON 4
+#define SURVIVAL_MOB_CREEPER 5
+#define SURVIVAL_MOB_SPIDER 6
+
+struct SurvivalMob {
+	struct Entity Base;
+	struct HacksComp Hacks;
+	struct PhysicsComp Physics;
+	struct CollisionsComp Collisions;
+	struct SoundsComp Sounds;
+	int entityID;
+	int type;
+	int health;
+	int maxHealth;
+	float targetX, targetZ;
+	float retargetTimer;
+	float attackTimer;
+	float hurtTimer;
+	cc_bool active;
+};
+
+static struct SurvivalMob survivalMobs[SURVIVAL_MOB_SLOTS];
+static cc_bool SurvivalMob_Tick(struct Entity* e, float delta);
+static float hostileSpawnTimer;
+
+static cc_bool SurvivalMob_IsHostile(const struct SurvivalMob* mob) {
+	return mob->type >= SURVIVAL_MOB_ZOMBIE;
+}
+
+static PackedCol SurvivalMob_GetColor(struct Entity* e) {
+	return PACKEDCOL_WHITE;
+}
+
+static void SurvivalMob_Despawn(struct Entity* e) {
+	struct SurvivalMob* mob = (struct SurvivalMob*)e;
+	if (e->Flags & ENTITY_FLAG_HAS_MODELVB) Gfx_DeleteScratchVb(&e->ModelVB);
+	mob->active = false;
+}
+
+static void SurvivalMob_SetLocation(struct Entity* e, struct LocationUpdate* update) {
+	if (update->flags & LU_HAS_POS) {
+		e->Position = update->pos;
+		e->prev.pos = update->pos;
+		e->next.pos = update->pos;
+	}
+	if (update->flags & LU_HAS_YAW) e->Yaw = update->yaw;
+	if (update->flags & LU_HAS_PITCH) e->Pitch = update->pitch;
+}
+
+static void SurvivalMob_RenderModel(struct Entity* e, float delta, float t) {
+	Vec3_Lerp(&e->Position, &e->prev.pos, &e->next.pos, t);
+	AnimatedComp_GetCurrent(e, t);
+	e->ShouldRender = Model_ShouldRender(e);
+	if (e->ShouldRender) Model_Render(e->Model, e);
+}
+
+static cc_bool SurvivalMob_ShouldRenderName(struct Entity* e) {
+	return false;
+}
+
+static const struct EntityVTABLE survivalMob_VTABLE = {
+	SurvivalMob_Tick, SurvivalMob_Despawn, SurvivalMob_SetLocation, SurvivalMob_GetColor,
+	SurvivalMob_RenderModel, SurvivalMob_ShouldRenderName
+};
+
+static struct SurvivalMob* SurvivalMob_FindFree(void) {
+	int i;
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		if (!survivalMobs[i].active && !Entities.List[i]) return &survivalMobs[i];
+	}
+	return NULL;
+}
+
+static int SurvivalMob_FindID(struct SurvivalMob* mob) {
+	int i;
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		if (&survivalMobs[i] == mob) return i;
+	}
+	return -1;
+}
+
+static int SurvivalMob_Count(cc_bool hostileOnly) {
+	int i, count = 0;
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		if (!survivalMobs[i].active) continue;
+		if (hostileOnly && !SurvivalMob_IsHostile(&survivalMobs[i])) continue;
+		count++;
+	}
+	return count;
+}
+
+static struct SurvivalMob* SurvivalMob_Spawn(int type, float x, float z) {
+	static const char* const modelNames[] = {
+		"pig", "chicken", "sheep", "zombie", "skeleton", "creeper", "spider"
+	};
+	struct SurvivalMob* mob = SurvivalMob_FindFree();
+	cc_string modelName;
+	int id;
+
+	if (!mob || type < SURVIVAL_MOB_PIG || type > SURVIVAL_MOB_SPIDER) return NULL;
+	id = SurvivalMob_FindID(mob);
+	if (id < 0) return NULL;
+
+	Mem_Set(mob, 0, sizeof(*mob));
+	mob->entityID = id;
+	mob->type = type;
+	mob->health = mob->maxHealth = SurvivalMob_IsHostile(mob) ? 20 : 10;
+	mob->active = true;
+
+	Entity_Init(&mob->Base);
+	modelName = String_FromConst(modelNames[type]);
+	Entity_SetModel(&mob->Base, &modelName);
+	mob->Base.VTABLE = &survivalMob_VTABLE;
+
+	HacksComp_Init(&mob->Hacks);
+	mob->Hacks.CanBePushed = false;
+	mob->Hacks.Floating = false;
+	PhysicsComp_Init(&mob->Physics, &mob->Base);
+	mob->Physics.Hacks = &mob->Hacks;
+	mob->Physics.Collisions = &mob->Collisions;
+	mob->Collisions.Entity = &mob->Base;
+	mob->Collisions.StepSize = 0.5f;
+	SoundsComp_Init(&mob->Sounds, &mob->Base);
+	AnimatedComp_Init(&mob->Base.Anim);
+
+	mob->Base.Position = Respawn_FindSpawnPosition(x, z, mob->Base.Size);
+	mob->Base.prev.pos = mob->Base.Position;
+	mob->Base.next.pos = mob->Base.Position;
+	mob->Base.Yaw = (float)Random_Next(&survivalRng, 360);
+	mob->targetX = mob->Base.Position.x;
+	mob->targetZ = mob->Base.Position.z;
+	mob->retargetTimer = 0.1f;
+	Entities.List[id] = &mob->Base;
+	return mob;
+}
+
+static void SurvivalMob_ClearAll(void) {
+	int i;
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		if (survivalMobs[i].active) Entities_Remove(survivalMobs[i].entityID);
+	}
+	hostileSpawnTimer = 0.0f;
+}
+
+static void SurvivalMob_Die(struct SurvivalMob* mob) {
+	if (!mob || !mob->active) return;
+
+	switch (mob->type) {
+	case SURVIVAL_MOB_PIG:
+		Survival_InventoryAdd(BLOCK_ITEM_RAW_PORK, 1 + Random_Next(&survivalRng, 3));
+		break;
+	case SURVIVAL_MOB_CHICKEN:
+		Survival_InventoryAdd(BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
+		break;
+	case SURVIVAL_MOB_SHEEP:
+		Survival_InventoryAdd(BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
+		break;
+	default:
+		break;
+	}
+	Entities_Remove(mob->entityID);
+}
+
+static void SurvivalMob_SetWanderTarget(struct SurvivalMob* mob) {
+	float angle = (float)Random_Next(&survivalRng, 6283) / 1000.0f;
+	float range = 2.0f + (float)Random_Next(&survivalRng, 500) / 100.0f;
+	mob->targetX = mob->Base.Position.x + Math_CosF(angle) * range;
+	mob->targetZ = mob->Base.Position.z + Math_SinF(angle) * range;
+	if (mob->targetX < 2.0f) mob->targetX = 2.0f;
+	if (mob->targetZ < 2.0f) mob->targetZ = 2.0f;
+	if (mob->targetX > World.Width - 2.0f) mob->targetX = World.Width - 2.0f;
+	if (mob->targetZ > World.Length - 2.0f) mob->targetZ = World.Length - 2.0f;
+	mob->retargetTimer = 2.0f + (float)Random_Next(&survivalRng, 400) / 100.0f;
+}
+
+static cc_bool SurvivalMob_Tick(struct Entity* e, float delta) {
+	struct SurvivalMob* mob = (struct SurvivalMob*)e;
+	struct LocalPlayer* player = Entities.CurPlayer;
+	Vec3 oldPos = e->Position;
+	Vec3 movement = { 0.0f, 0.0f, 0.0f };
+	cc_bool wasOnGround = e->OnGround;
+	float dx, dz, distance, speed;
+	cc_bool hostile = SurvivalMob_IsHostile(mob);
+
+	if (!mob->active || !Survival_IsActive() || !World.Loaded || !player) return true;
+	mob->retargetTimer -= delta;
+	mob->attackTimer -= delta;
+	mob->hurtTimer -= delta;
+
+	if (hostile) {
+		dx = player->Base.Position.x - e->Position.x;
+		dz = player->Base.Position.z - e->Position.z;
+		distance = Math_SqrtF(dx * dx + dz * dz);
+		if (distance < 1.35f) {
+			if (mob->attackTimer <= 0.0f && player->Base.OnGround && !Survival_IsDead()) {
+				Survival_Damage(mob->type == SURVIVAL_MOB_CREEPER ? 4 : 2);
+				mob->attackTimer = 1.25f;
+			}
+			dx = dz = 0.0f;
+		} else if (distance < 20.0f && distance > 0.001f) {
+			dx /= distance;
+			dz /= distance;
+		} else {
+			if (mob->retargetTimer <= 0.0f) SurvivalMob_SetWanderTarget(mob);
+			dx = mob->targetX - e->Position.x;
+			dz = mob->targetZ - e->Position.z;
+			distance = Math_SqrtF(dx * dx + dz * dz);
+			if (distance > 0.3f) { dx /= distance; dz /= distance; }
+			else { dx = dz = 0.0f; }
+		}
+		speed = 0.65f;
+	} else {
+		if (mob->retargetTimer <= 0.0f) SurvivalMob_SetWanderTarget(mob);
+		dx = mob->targetX - e->Position.x;
+		dz = mob->targetZ - e->Position.z;
+		distance = Math_SqrtF(dx * dx + dz * dz);
+		if (distance > 0.35f) { dx /= distance; dz /= distance; }
+		else { dx = dz = 0.0f; }
+		speed = 0.28f;
+	}
+
+	if (dx != 0.0f || dz != 0.0f) {
+		movement.x = dx * speed;
+		movement.z = dz * speed;
+		e->Yaw = Math_Atan2f(dz, dx) * MATH_RAD2DEG;
+	}
+	PhysicsComp_UpdateVelocityState(&mob->Physics);
+	PhysicsComp_PhysicsTick(&mob->Physics, movement);
+	e->prev.pos = oldPos;
+	e->next.pos = e->Position;
+	AnimatedComp_Update(e, oldPos, e->Position, delta);
+	SoundsComp_Tick(&mob->Sounds, wasOnGround);
+
+	if (e->Position.y < 0.0f) SurvivalMob_Die(mob);
+	return true;
+}
+
+static cc_bool Survival_IsNight(void) {
+	return timeOfDay >= 540.0f && timeOfDay <= 1120.0f;
+}
+
+static void Survival_SpawnInitialAnimals(void) {
+	Vec3 centre;
+	int i;
+	if (!Entities.CurPlayer) return;
+	centre = Entities.CurPlayer->Base.Position;
+	SurvivalMob_Spawn(SURVIVAL_MOB_PIG, centre.x + 3.0f, centre.z + 2.0f);
+	SurvivalMob_Spawn(SURVIVAL_MOB_PIG, centre.x - 3.0f, centre.z - 2.0f);
+	SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, centre.x + 5.0f, centre.z - 3.0f);
+	SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, centre.x - 5.0f, centre.z + 3.0f);
+	SurvivalMob_Spawn(SURVIVAL_MOB_SHEEP, centre.x + 2.0f, centre.z - 5.0f);
+	for (i = 0; i < 5; i++) { /* keep the initial population modest */ }
+}
+
+static void Survival_SpawnNightMob(void) {
+	Vec3 centre;
+	int type;
+	if (!Entities.CurPlayer) return;
+	centre = Entities.CurPlayer->Base.Position;
+	type = SURVIVAL_MOB_ZOMBIE + Random_Next(&survivalRng, 4);
+	SurvivalMob_Spawn(type,
+		centre.x + (float)(Random_Next(&survivalRng, 2) ? 1 : -1) * (8.0f + Random_Next(&survivalRng, 6)),
+		centre.z + (float)(Random_Next(&survivalRng, 2) ? 1 : -1) * (8.0f + Random_Next(&survivalRng, 6)));
+}
+
+cc_bool Survival_AttackMob(void) {
+	int id, i, damage;
+	struct SurvivalMob* mob = NULL;
+	struct Entity* target;
+	float dx, dy, dz, distance;
+
+	if (!Survival_IsActive() || !Entities.CurPlayer) return false;
+	id = Entities_GetClosest(&Entities.CurPlayer->Base);
+	if (id < 0 || id >= SURVIVAL_MOB_SLOTS) return false;
+	target = Entities.List[id];
+	if (!target) return false;
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		if (survivalMobs[i].active && &survivalMobs[i].Base == target) { mob = &survivalMobs[i]; break; }
+	}
+	if (!mob) return false;
+
+	dx = target->Position.x - Entities.CurPlayer->Base.Position.x;
+	dy = target->Position.y - Entities.CurPlayer->Base.Position.y;
+	dz = target->Position.z - Entities.CurPlayer->Base.Position.z;
+	distance = Math_SqrtF(dx * dx + dy * dy + dz * dz);
+	if (distance > 4.5f) return false;
+	if (mob->hurtTimer > 0.0f) return true;
+
+	damage = Inventory_SelectedBlock == BLOCK_ITEM_WOOD_AXE || Inventory_SelectedBlock == BLOCK_ITEM_STONE_AXE ? 4 : 2;
+	mob->health -= damage;
+	mob->hurtTimer = 0.45f;
+	Survival_CancelMining();
+	if (mob->health <= 0) SurvivalMob_Die(mob);
+	return true;
+}
+
+static void Survival_OnNewMapLoaded(void) {
+	if (!Survival_IsActive()) return;
+	SurvivalMob_ClearAll();
+	Survival_SpawnInitialAnimals();
+}
+
 static void Survival_DrawMeter(int x, int y, int value, PackedCol fill) {
 	int i, amount;
 	PackedCol empty = PackedCol_Make(45, 45, 45, 230);
@@ -935,6 +1255,7 @@ static void Survival_Init(void) {
 }
 
 static void Survival_Free(void) {
+	SurvivalMob_ClearAll();
 	Commands_Unregister(&SurvivalCraftCommand);
 	if (Game.Draw2DHooks[1] == Survival_RenderHUD) Game.Draw2DHooks[1] = NULL;
 }
@@ -944,6 +1265,6 @@ struct IGameComponent Survival_Component = {
 	Survival_Free,
 	Survival_ComponentReset,
 	Survival_OnNewMap,
-	NULL,
+	Survival_OnNewMapLoaded,
 	NULL
 };
