@@ -1481,28 +1481,31 @@ static void Survival_SpawnNightMob(void) {
 }
 
 cc_bool Survival_AttackMob(void) {
-	int id, i, damage;
+	int i, damage;
 	struct SurvivalMob* mob = NULL;
 	struct Entity* target;
-	float dx, dy, dz, distance;
+	float dx, dy, dz, distance, closestDistance = 4.5f;
 	Vec3 eye;
 	float blockDX, blockDY, blockDZ, blockDistance;
 
 	if (!Survival_IsActive() || !Entities.CurPlayer) return false;
-	id = Entities_GetClosest(&Entities.CurPlayer->Base);
-	if (id < 0 || id >= SURVIVAL_MOB_SLOTS) return false;
-	target = Entities.List[id];
-	if (!target) return false;
+
+	/* Search the mob pool directly; dropped-item entities share the general entity list. */
 	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
-		if (survivalMobs[i].active && &survivalMobs[i].Base == target) { mob = &survivalMobs[i]; break; }
+		if (!survivalMobs[i].active) continue;
+		target = &survivalMobs[i].Base;
+		dx = target->Position.x - Entities.CurPlayer->Base.Position.x;
+		dy = target->Position.y - Entities.CurPlayer->Base.Position.y;
+		dz = target->Position.z - Entities.CurPlayer->Base.Position.z;
+		distance = Math_SqrtF(dx * dx + dy * dy + dz * dz);
+		if (distance < closestDistance) {
+			closestDistance = distance;
+			mob = &survivalMobs[i];
+		}
 	}
 	if (!mob) return false;
-
-	dx = target->Position.x - Entities.CurPlayer->Base.Position.x;
-	dy = target->Position.y - Entities.CurPlayer->Base.Position.y;
-	dz = target->Position.z - Entities.CurPlayer->Base.Position.z;
-	distance = Math_SqrtF(dx * dx + dy * dy + dz * dz);
-	if (distance > 4.5f) return false;
+	target = &mob->Base;
+	distance = closestDistance;
 	/* Do not hit a mob through the nearer block selected by the normal block ray. */
 	if (Game_SelectedPos.valid) {
 		eye = Entity_GetEyePosition(&Entities.CurPlayer->Base);
