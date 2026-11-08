@@ -1,5 +1,6 @@
 #include "Survival.h"
 #include "BlockID.h"
+#include "Block.h"
 #include "Chat.h"
 #include "Entity.h"
 #include "ExtMath.h"
@@ -35,8 +36,59 @@ static int dayCycleStep;
 static BlockID miningBlock;
 static float miningProgress;
 
+
+#ifndef CC_BUILD_TINYMEM
+static void Survival_DefineVirtualItem(BlockID id, const char* name, BlockID templateBlock, cc_bool placeable, cc_bool solid) {
+	cc_string label = String_FromReadonly(name);
+	int face;
+	if (Block_IsCustomDefined(id)) Block_UndefineCustom(id);
+	Block_ResetProps(id);
+	Block_SetName(id, &label);
+	for (face = 0; face < FACE_COUNT; face++) {
+		Block_Tex(id, face) = Block_Tex(templateBlock, face);
+	}
+	Blocks.Draw[id] = solid ? DRAW_OPAQUE : DRAW_SPRITE;
+	Blocks.Collide[id] = solid ? COLLIDE_SOLID : COLLIDE_NONE;
+	Block_DefineCustom(id, true);
+	Blocks.CanPlace[id] = placeable;
+	Blocks.CanDelete[id] = placeable;
+}
+
+static void Survival_DefineVirtualItems(void) {
+	Survival_DefineVirtualItem(BLOCK_ITEM_APPLE, "Apple", BLOCK_ROSE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STICK, "Stick", BLOCK_LOG, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_BREAD, "Bread", BLOCK_SAND, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_RAW_PORK, "Raw pork", BLOCK_RED, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_COOKED_PORK, "Cooked pork", BLOCK_BRICK, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_RAW_BEEF, "Raw beef", BLOCK_RED, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_COOKED_BEEF, "Cooked beef", BLOCK_BRICK, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_RAW_CHICKEN, "Raw chicken", BLOCK_YELLOW, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_COOKED_CHICKEN, "Cooked chicken", BLOCK_SAND, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CRAFTING_TABLE, "Crafting table", BLOCK_CRATE, true, true);
+	Survival_DefineVirtualItem(BLOCK_ITEM_FURNACE, "Furnace", BLOCK_COBBLE, true, true);
+	Survival_DefineVirtualItem(BLOCK_ITEM_TORCH, "Torch", BLOCK_FIRE, true, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_WOOD_PICKAXE, "Wooden pickaxe", BLOCK_WOOD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STONE_PICKAXE, "Stone pickaxe", BLOCK_STONE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_WOOD_AXE, "Wooden axe", BLOCK_WOOD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STONE_AXE, "Stone axe", BLOCK_STONE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_WOOD_SHOVEL, "Wooden shovel", BLOCK_WOOD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STONE_SHOVEL, "Stone shovel", BLOCK_STONE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_WHEAT, "Wheat", BLOCK_YELLOW, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_SEEDS, "Seeds", BLOCK_SAPLING, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_COAL, "Coal", BLOCK_BLACK, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_ORE, "Iron ore", BLOCK_IRON_ORE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_ORE, "Gold ore", BLOCK_GOLD_ORE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_INGOT, "Iron ingot", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_INGOT, "Gold ingot", BLOCK_GOLD, false, false);
+}
+#endif
+
 cc_bool Survival_IsActive(void) {
+#if defined CC_BUILD_TINYMEM
+	return false;
+#else
 	return Server.IsSinglePlayer && !Game_ClassicMode && World.Loaded;
+#endif
 }
 #define Survival_Active Survival_IsActive
 
@@ -110,6 +162,35 @@ cc_bool Survival_CanPlaceBlock(BlockID block) {
 void Survival_OnBlockPlaced(BlockID block) {
 	if (Survival_IsActive()) Survival_InventoryRemove(block, 1);
 }
+
+
+cc_bool Survival_UseItem(BlockID block) {
+	int points = 0;
+	float sat = 0.0f;
+	if (!Survival_IsActive()) return false;
+
+	switch (block) {
+	case BLOCK_ITEM_APPLE: points = 4; sat = 2.4f; break;
+	case BLOCK_ITEM_BREAD: points = 5; sat = 6.0f; break;
+	case BLOCK_ITEM_RAW_PORK: points = 3; sat = 1.8f; break;
+	case BLOCK_ITEM_COOKED_PORK: points = 8; sat = 12.8f; break;
+	case BLOCK_ITEM_RAW_BEEF: points = 3; sat = 1.8f; break;
+	case BLOCK_ITEM_COOKED_BEEF: points = 8; sat = 12.8f; break;
+	case BLOCK_ITEM_RAW_CHICKEN: points = 2; sat = 1.2f; break;
+	case BLOCK_ITEM_COOKED_CHICKEN: points = 6; sat = 7.2f; break;
+	default: return false;
+	}
+
+	if (food >= SURVIVAL_MAX_FOOD) {
+		Chat_AddRaw("&eYour hunger bar is already full.");
+		return true;
+	}
+	if (!Survival_InventoryRemove(block, 1)) return true;
+	Survival_AddFood(points, sat);
+	Chat_AddRaw("&aYou ate food.");
+	return true;
+}
+
 
 static float Survival_GetBlockMiningTime(BlockID block) {
 	switch (block) {
@@ -646,6 +727,9 @@ static void Survival_RenderHUD(float delta) {
 }
 
 static void Survival_Init(void) {
+#ifndef CC_BUILD_TINYMEM
+	Survival_DefineVirtualItems();
+#endif
 	Survival_Reset();
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
