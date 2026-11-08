@@ -566,6 +566,7 @@ static void Survival_OnNewMap(void) {
 	Survival_Reset();
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
+	SurvivalItem_ClearAll();
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
 	Mem_Set(toolDurability, 0, sizeof(toolDurability));
 	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) Inventory.Table[i] = BLOCK_AIR;
@@ -592,9 +593,9 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 16];
 	cc_uint16 dayTicks;
-	int i, itemTypes = 0, offset = 14;
+	int i, itemTypes = 0, droppedCount = 0, offset = 14;
 	cc_result res;
 
 	if (!Survival_IsActive()) return 0;
@@ -604,7 +605,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 3;
+	data[4] = 4;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -637,6 +638,29 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		data[offset++] = (cc_uint8)(block >> 8);
 	}
 
+	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
+		if (survivalItems[i].active && survivalItems[i].count > 0) droppedCount++;
+	}
+	data[offset++] = (cc_uint8)droppedCount;
+	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
+		struct SurvivalItem* item = &survivalItems[i];
+		cc_uint32 bits;
+		if (!item->active || item->count <= 0) continue;
+		data[offset++] = (cc_uint8)(item->block & 0xFF);
+		data[offset++] = (cc_uint8)(item->block >> 8);
+		data[offset++] = (cc_uint8)(item->count & 0xFF);
+		data[offset++] = (cc_uint8)(item->count >> 8);
+		Mem_Copy(&bits, &item->Base.Position.x, sizeof(bits));
+		data[offset++] = (cc_uint8)(bits & 0xFF); data[offset++] = (cc_uint8)((bits >> 8) & 0xFF);
+		data[offset++] = (cc_uint8)((bits >> 16) & 0xFF); data[offset++] = (cc_uint8)(bits >> 24);
+		Mem_Copy(&bits, &item->Base.Position.y, sizeof(bits));
+		data[offset++] = (cc_uint8)(bits & 0xFF); data[offset++] = (cc_uint8)((bits >> 8) & 0xFF);
+		data[offset++] = (cc_uint8)((bits >> 16) & 0xFF); data[offset++] = (cc_uint8)(bits >> 24);
+		Mem_Copy(&bits, &item->Base.Position.z, sizeof(bits));
+		data[offset++] = (cc_uint8)(bits & 0xFF); data[offset++] = (cc_uint8)((bits >> 8) & 0xFF);
+		data[offset++] = (cc_uint8)((bits >> 16) & 0xFF); data[offset++] = (cc_uint8)(bits >> 24);
+	}
+
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_CreatePath(&stream, &rawPath);
 	if (res) return res;
@@ -653,9 +677,9 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
-	cc_uint32 payloadSize;
-	int i, offset, stackSlots = 0;
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 16];
+	cc_uint32 payloadSize, droppedOffset;
+	int i, offset, stackSlots = 0, droppedCount = 0;
 	cc_result res;
 
 	if (!Survival_IsActive()) return 0;
@@ -665,6 +689,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	/* Older maps have no companion file; keep their fresh Survival state. */
 	if (res) {
 		Survival_OnNewMap();
+		Survival_SpawnInitialAnimals();
 		return 0;
 	}
 
@@ -674,7 +699,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2 && data[4] != 3) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
@@ -686,6 +711,26 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	if (res) {
 		stream.Close(&stream);
 		return res;
+	}
+	droppedOffset = 12 + payloadSize;
+	if (data[4] >= 4) {
+		res = Stream_Read(&stream, data + droppedOffset, 1);
+		if (res) {
+			stream.Close(&stream);
+			return res;
+		}
+		droppedCount = data[droppedOffset];
+		if (droppedCount > SURVIVAL_ITEM_SLOTS) {
+			stream.Close(&stream);
+			return ERR_INVALID_ARGUMENT;
+		}
+		if (droppedCount > 0) {
+			res = Stream_Read(&stream, data + droppedOffset + 1, (cc_uint32)droppedCount * 16U);
+			if (res) {
+				stream.Close(&stream);
+				return res;
+			}
+		}
 	}
 	res = stream.Close(&stream);
 	if (res) return res;
@@ -743,6 +788,32 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	}
 	Inventory.SelectedIndex = data[10];
 	Inventory.Offset = data[11] * INVENTORY_BLOCKS_PER_HOTBAR;
+	if (data[4] >= 4) {
+		offset = (int)droppedOffset + 1;
+		for (i = 0; i < droppedCount; i++) {
+			cc_uint16 block = (cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8));
+			cc_uint16 amount = (cc_uint16)(data[offset + 2] | ((cc_uint16)data[offset + 3] << 8));
+			cc_uint32 bx, by, bz;
+			Vec3 position;
+			offset += 4;
+			bx = (cc_uint32)data[offset] | ((cc_uint32)data[offset + 1] << 8) |
+				((cc_uint32)data[offset + 2] << 16) | ((cc_uint32)data[offset + 3] << 24);
+			offset += 4;
+			by = (cc_uint32)data[offset] | ((cc_uint32)data[offset + 1] << 8) |
+				((cc_uint32)data[offset + 2] << 16) | ((cc_uint32)data[offset + 3] << 24);
+			offset += 4;
+			bz = (cc_uint32)data[offset] | ((cc_uint32)data[offset + 1] << 8) |
+				((cc_uint32)data[offset + 2] << 16) | ((cc_uint32)data[offset + 3] << 24);
+			offset += 4;
+			Mem_Copy(&position.x, &bx, sizeof(bx));
+			Mem_Copy(&position.y, &by, sizeof(by));
+			Mem_Copy(&position.z, &bz, sizeof(bz));
+			if (block == BLOCK_AIR || block >= BLOCK_COUNT || amount == 0 || amount > SURVIVAL_INVENTORY_STACK_SIZE) continue;
+			if (position.x < 0.0f || position.x >= World.Width || position.y < 0.0f ||
+				position.y >= World.Height || position.z < 0.0f || position.z >= World.Length) continue;
+			SurvivalItem_Spawn((BlockID)block, amount, position);
+		}
+	}
 	Survival_RefreshInventoryMap();
 	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
 	return 0;
