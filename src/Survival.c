@@ -1129,7 +1129,6 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 	SoundsComp_Tick(&mob->Sounds, wasOnGround);
 
 	if (e->Position.y < 0.0f) SurvivalMob_Die(mob);
-	return true;
 }
 
 static cc_bool Survival_IsNight(void) {
