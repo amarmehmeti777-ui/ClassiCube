@@ -30,6 +30,8 @@ static struct ScheduledTask2 survivalTask;
 static int itemCounts[BLOCK_COUNT];
 static cc_bool miningActive;
 static int miningX, miningY, miningZ;
+static float timeOfDay;
+static int dayCycleStep;
 static BlockID miningBlock;
 static float miningProgress;
 
@@ -190,6 +192,8 @@ static void Survival_OnNewMap(void) {
 	int i;
 	if (!Server.IsSinglePlayer) return;
 	Survival_Reset();
+	timeOfDay = 0.0f;
+	dayCycleStep = -1;
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
 	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) Inventory.Table[i] = BLOCK_AIR;
 	Inventory.SelectedIndex = 0;
@@ -433,9 +437,38 @@ static void Survival_ConsumeExhaustion(void) {
 	}
 }
 
+static void Survival_UpdateDayNight(float delta) {
+	float phase, daylight, twilight;
+	PackedCol sky, fog, sun;
+	int step;
+
+	timeOfDay += delta;
+	while (timeOfDay >= 1200.0f) timeOfDay -= 1200.0f;
+	step = (int)timeOfDay;
+	if (step == dayCycleStep) return;
+	dayCycleStep = step;
+
+	phase = (timeOfDay / 1200.0f) * (2.0f * MATH_PI);
+	daylight = (Math_CosF(phase) + 1.0f) * 0.5f;
+	twilight = 1.0f - Math_AbsF(2.0f * daylight - 1.0f);
+
+	sky = PackedCol_Lerp(PackedCol_Make(9, 15, 31, 255), PackedCol_Make(153, 204, 255, 255), daylight);
+	fog = PackedCol_Lerp(PackedCol_Make(18, 22, 37, 255), PackedCol_Make(235, 242, 255, 255), daylight);
+	sun = PackedCol_Lerp(PackedCol_Make(85, 98, 132, 255), PackedCol_Make(255, 255, 255, 255), daylight);
+
+	sky = PackedCol_Lerp(sky, PackedCol_Make(238, 126, 73, 255), twilight * 0.32f);
+	fog = PackedCol_Lerp(fog, PackedCol_Make(210, 126, 95, 255), twilight * 0.22f);
+	sun = PackedCol_Lerp(sun, PackedCol_Make(255, 181, 120, 255), twilight * 0.35f);
+
+	Env_SetSkyCol(sky);
+	Env_SetFogCol(fog);
+	Env_SetSunCol(sun);
+}
+
 static cc_bool Survival_Tick(struct ScheduledTask2* task) {
 	const float dt = task->interval;
 	if (!Server.IsSinglePlayer || !World.Loaded) return true;
+	Survival_UpdateDayNight(dt);
 
 	if (health <= 0) {
 		deathTimer -= dt;
@@ -599,6 +632,8 @@ static void Survival_RenderHUD(float delta) {
 
 static void Survival_Init(void) {
 	Survival_Reset();
+	timeOfDay = 0.0f;
+	dayCycleStep = -1;
 	Game.Draw2DHooks[1] = Survival_RenderHUD;
 	survivalTask.accumulator = 0.0f;
 	survivalTask.interval = SURVIVAL_TICK;
