@@ -270,7 +270,7 @@ static void Survival_RenderHUD(float delta) {
 
 static void Survival_Init(void) {
 	Survival_Reset();
-	Game.Draw2DHooks[3] = Survival_RenderHUD;
+	Game.Draw2DHooks[1] = Survival_RenderHUD;
 	survivalTask.accumulator = 0.0f;
 	survivalTask.interval = SURVIVAL_TICK;
 	survivalTask.callback = Survival_Tick;
@@ -279,7 +279,7 @@ static void Survival_Init(void) {
 }
 
 static void Survival_Free(void) {
-	if (Game.Draw2DHooks[3] == Survival_RenderHUD) Game.Draw2DHooks[3] = NULL;
+	if (Game.Draw2DHooks[1] == Survival_RenderHUD) Game.Draw2DHooks[1] = NULL;
 }
 
 struct IGameComponent Survival_Component = {
