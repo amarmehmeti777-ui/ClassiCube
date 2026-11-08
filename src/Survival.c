@@ -30,6 +30,8 @@ static cc_bool fallActive, hasLastPosition, jumpWasRising;
 static float fallDistance, fallLastY, lastX, lastZ;
 static struct ScheduledTask2 survivalTask;
 static int itemCounts[BLOCK_COUNT];
+static int toolDurability[BLOCK_COUNT];
+static RNGState survivalRng;
 static cc_bool miningActive;
 static int miningX, miningY, miningZ;
 static float timeOfDay;
@@ -93,9 +95,27 @@ cc_bool Survival_IsActive(void) {
 }
 #define Survival_Active Survival_IsActive
 
+static cc_bool Survival_IsTool(BlockID block) {
+	return block == BLOCK_ITEM_WOOD_PICKAXE || block == BLOCK_ITEM_STONE_PICKAXE ||
+		block == BLOCK_ITEM_WOOD_AXE || block == BLOCK_ITEM_STONE_AXE ||
+		block == BLOCK_ITEM_WOOD_SHOVEL || block == BLOCK_ITEM_STONE_SHOVEL;
+}
+
+static int Survival_ToolMaxDurability(BlockID block) {
+	switch (block) {
+	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: return 60;
+	case BLOCK_ITEM_STONE_PICKAXE: case BLOCK_ITEM_STONE_AXE: case BLOCK_ITEM_STONE_SHOVEL: return 132;
+	default: return 0;
+	}
+}
+
+static int Survival_ItemMaxStack(BlockID block) {
+	return Survival_IsTool(block) ? 1 : SURVIVAL_INVENTORY_STACK_SIZE;
+}
+
 static int Survival_UsedInventoryStacks(void) {
 	int i, slots = 0;
-	for (i = 1; i < BLOCK_COUNT; i++) slots += (itemCounts[i] + 63) / 64;
+	for (i = 1; i < BLOCK_COUNT; i++) if (itemCounts[i] > 0) slots += (itemCounts[i] + Survival_ItemMaxStack((BlockID)i) - 1) / Survival_ItemMaxStack((BlockID)i);
 	return slots;
 }
 
@@ -113,18 +133,21 @@ int Survival_GetItemCount(BlockID block) {
 }
 
 int Survival_InventoryAdd(BlockID block, int amount) {
-	int used, freeSlots, room, capacity, i;
+	int used, freeSlots, room, capacity, maxStack, i;
 	if (!Survival_IsActive() || block <= BLOCK_AIR || block >= BLOCK_COUNT || amount <= 0) return 0;
+	maxStack = Survival_ItemMaxStack(block);
+	if (maxStack == 1 && itemCounts[block] > 0) return 0;
 	used = Survival_UsedInventoryStacks();
 	freeSlots = SURVIVAL_INVENTORY_SLOTS - used;
 	if (freeSlots < 0) freeSlots = 0;
-	room = itemCounts[block] % 64;
-	room = room ? 64 - room : 0;
-	capacity = room + freeSlots * 64;
+	room = itemCounts[block] % maxStack;
+	room = room ? maxStack - room : 0;
+	capacity = maxStack == 1 ? (freeSlots > 0 ? 1 : 0) : room + freeSlots * maxStack;
 	if (amount > capacity) amount = capacity;
 	if (amount <= 0) return 0;
 
 	itemCounts[block] += amount;
+	if (Survival_IsTool(block)) toolDurability[block] = Survival_ToolMaxDurability(block);
 	Survival_RefreshInventoryMap();
 	for (i = 0; i < INVENTORY_BLOCKS_PER_HOTBAR; i++) {
 		if (Inventory_Get(i) == block) return amount;
@@ -145,6 +168,7 @@ static int Survival_InventoryRemove(BlockID block, int amount) {
 	removed = min(amount, itemCounts[block]);
 	itemCounts[block] -= removed;
 	if (itemCounts[block] == 0) {
+		toolDurability[block] = 0;
 		wasSelected = Inventory_SelectedBlock == block;
 		for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) {
 			if (Inventory.Table[i] == block) Inventory.Table[i] = BLOCK_AIR;
@@ -194,33 +218,31 @@ cc_bool Survival_UseItem(BlockID block) {
 
 
 static float Survival_GetBlockMiningTime(BlockID block) {
+	BlockID held = Inventory_SelectedBlock;
+	float time;
 	switch (block) {
-	case BLOCK_OBSIDIAN: return 8.0f;
-	case BLOCK_STONE:
-	case BLOCK_COBBLE:
-	case BLOCK_GOLD_ORE:
-	case BLOCK_IRON_ORE:
-	case BLOCK_COAL_ORE:
-	case BLOCK_BRICK:
-	case BLOCK_STONE_BRICK:
-	case BLOCK_MOSSY_ROCKS: return 2.0f;
-	case BLOCK_LOG:
-	case BLOCK_WOOD:
-	case BLOCK_BOOKSHELF:
-	case BLOCK_CRATE: return 1.0f;
-	case BLOCK_DIRT:
-	case BLOCK_GRASS:
-	case BLOCK_SAND:
-	case BLOCK_GRAVEL:
-	case BLOCK_SNOW: return 0.5f;
-	case BLOCK_LEAVES:
-	case BLOCK_SAPLING:
-	case BLOCK_DANDELION:
-	case BLOCK_ROSE:
-	case BLOCK_BROWN_SHROOM:
-	case BLOCK_RED_SHROOM: return 0.5f;
-	default: return 1.0f;
+	case BLOCK_OBSIDIAN: time = 8.0f; break;
+	case BLOCK_STONE: case BLOCK_COBBLE: case BLOCK_GOLD_ORE: case BLOCK_IRON_ORE:
+	case BLOCK_COAL_ORE: case BLOCK_BRICK: case BLOCK_STONE_BRICK: case BLOCK_MOSSY_ROCKS:
+		time = Survival_HasPickaxe() ? 1.8f : 5.0f;
+		if (held == BLOCK_ITEM_STONE_PICKAXE) time *= 0.55f;
+		break;
+	case BLOCK_LOG: case BLOCK_WOOD: case BLOCK_BOOKSHELF: case BLOCK_CRATE:
+		time = 1.0f;
+		if ((held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE) && toolDurability[held] > 0) time *= 0.35f;
+		break;
+	case BLOCK_DIRT: case BLOCK_GRASS: case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
+		time = 0.5f;
+		if ((held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL) && toolDurability[held] > 0) time *= 0.35f;
+		break;
+	case BLOCK_LEAVES: case BLOCK_SAPLING: case BLOCK_DANDELION: case BLOCK_ROSE:
+	case BLOCK_BROWN_SHROOM: case BLOCK_RED_SHROOM:
+		time = 0.5f;
+		if ((held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE) && toolDurability[held] > 0) time *= 0.4f;
+		break;
+	default: time = 1.0f; break;
 	}
+	return time;
 }
 
 void Survival_CancelMining(void) {
@@ -252,11 +274,52 @@ cc_bool Survival_MineBlock(int x, int y, int z, BlockID block, float elapsed) {
 	return true;
 }
 
+static cc_bool Survival_HasPickaxe(void) {
+	BlockID held = Inventory_SelectedBlock;
+	return (held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE) && toolDurability[held] > 0;
+}
+
+static cc_bool Survival_HasStonePickaxe(void) {
+	BlockID held = Inventory_SelectedBlock;
+	return held == BLOCK_ITEM_STONE_PICKAXE && toolDurability[held] > 0;
+}
+
+static void Survival_UseToolDurability(BlockID block) {
+	BlockID held = Inventory_SelectedBlock;
+	cc_bool usesTool = false;
+	if (toolDurability[held] <= 0) return;
+
+	switch (block) {
+	case BLOCK_STONE: case BLOCK_COBBLE: case BLOCK_COAL_ORE:
+	case BLOCK_IRON_ORE: case BLOCK_GOLD_ORE: case BLOCK_OBSIDIAN:
+		usesTool = held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE;
+		break;
+	case BLOCK_LOG: case BLOCK_WOOD: case BLOCK_BOOKSHELF: case BLOCK_CRATE:
+		usesTool = held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE;
+		break;
+	case BLOCK_DIRT: case BLOCK_GRASS: case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
+		usesTool = held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL;
+		break;
+	}
+	if (!usesTool) return;
+
+	toolDurability[held]--;
+	if (toolDurability[held] <= 0) {
+		Chat_AddRaw("&cYour tool broke.");
+		Survival_InventoryRemove(held, 1);
+	}
+}
+
 static BlockID Survival_GetBlockDrop(BlockID block) {
 	if (block == BLOCK_GRASS) return BLOCK_DIRT;
-	if (block == BLOCK_STONE) return BLOCK_COBBLE;
+	if (block == BLOCK_STONE) return Survival_HasPickaxe() ? BLOCK_COBBLE : BLOCK_AIR;
+	if (block == BLOCK_COAL_ORE) return Survival_HasPickaxe() ? BLOCK_ITEM_COAL : BLOCK_AIR;
+	if (block == BLOCK_IRON_ORE) return Survival_HasStonePickaxe() ? BLOCK_ITEM_IRON_ORE : BLOCK_AIR;
+	if (block == BLOCK_GOLD_ORE) return Survival_HasStonePickaxe() ? BLOCK_ITEM_GOLD_ORE : BLOCK_AIR;
 	if (block == BLOCK_LEAVES) {
-		return ((int)(Game.Time * 10.0) % 5) == 0 ? BLOCK_SAPLING : BLOCK_AIR;
+		if (Random_Next(&survivalRng, 200) == 0) return BLOCK_ITEM_APPLE;
+		if (Random_Next(&survivalRng, 20) == 0) return BLOCK_SAPLING;
+		return BLOCK_AIR;
 	}
 	if (block == BLOCK_AIR || block == BLOCK_WATER || block == BLOCK_STILL_WATER ||
 		block == BLOCK_LAVA || block == BLOCK_STILL_LAVA || block == BLOCK_BEDROCK) return BLOCK_AIR;
@@ -267,6 +330,7 @@ void Survival_OnBlockBroken(BlockID block) {
 	BlockID drop;
 	if (!Survival_IsActive()) return;
 	drop = Survival_GetBlockDrop(block);
+	Survival_UseToolDurability(block);
 	if (drop != BLOCK_AIR) Survival_InventoryAdd(drop, 1);
 }
 
@@ -274,11 +338,10 @@ static void Survival_OnNewMap(void) {
 	int i;
 	if (!Server.IsSinglePlayer) return;
 	Survival_Reset();
-	Commands_Register(&SurvivalCraftCommand);
-	Chat_AddRaw("&aSurvival mode enabled. Use /craft help for recipes.");
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
+	Mem_Set(toolDurability, 0, sizeof(toolDurability));
 	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) Inventory.Table[i] = BLOCK_AIR;
 	Inventory.SelectedIndex = 0;
 	Inventory.Offset = 0;
@@ -303,7 +366,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
 	cc_uint16 dayTicks;
 	int i, itemTypes = 0, offset = 14;
 	cc_result res;
@@ -315,7 +378,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 2;
+	data[4] = 3;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -332,11 +395,13 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		cc_uint16 block, count;
 		if (itemCounts[i] <= 0) continue;
 		block = (cc_uint16)i;
-		count = (cc_uint16)min(itemCounts[i], SURVIVAL_INVENTORY_SLOTS * SURVIVAL_INVENTORY_STACK_SIZE);
+		count = (cc_uint16)min(itemCounts[i], SURVIVAL_INVENTORY_SLOTS * Survival_ItemMaxStack((BlockID)i));
 		data[offset++] = (cc_uint8)(block & 0xFF);
 		data[offset++] = (cc_uint8)(block >> 8);
 		data[offset++] = (cc_uint8)(count & 0xFF);
 		data[offset++] = (cc_uint8)(count >> 8);
+		data[offset++] = (cc_uint8)(toolDurability[i] & 0xFF);
+		data[offset++] = (cc_uint8)(toolDurability[i] >> 8);
 		itemTypes++;
 	}
 
@@ -383,13 +448,13 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
 	}
 
-	payloadSize = (data[4] == 2 ? 2U : 0U) + (cc_uint32)data[9] * 4U +
+	payloadSize = (data[4] >= 2 ? 2U : 0U) + (cc_uint32)data[9] * (data[4] >= 3 ? 6U : 4U) +
 		(cc_uint32)INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2U;
 	res = Stream_Read(&stream, data + 12, payloadSize);
 	if (res) {
@@ -400,6 +465,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	if (res) return res;
 
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
+	Mem_Set(toolDurability, 0, sizeof(toolDurability));
 	health = min((int)data[5], SURVIVAL_MAX_HEALTH);
 	food = min((int)data[6], SURVIVAL_MAX_FOOD);
 	if (health == 0) health = SURVIVAL_MAX_HEALTH;
@@ -412,7 +478,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	Survival_CancelMining();
 
 	offset = 12;
-	if (data[4] == 2) {
+	if (data[4] >= 2) {
 		cc_uint16 savedTicks = (cc_uint16)(data[12] | ((cc_uint16)data[13] << 8));
 		timeOfDay = min((float)savedTicks, 2399.0f) * 0.5f;
 		offset = 14;
@@ -423,10 +489,19 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	for (i = 0; i < data[9]; i++) {
 		cc_uint16 block = (cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8));
 		cc_uint16 amount = (cc_uint16)(data[offset + 2] | ((cc_uint16)data[offset + 3] << 8));
-		offset += 4;
+		cc_uint16 durability = data[4] >= 3 ? (cc_uint16)(data[offset + 4] | ((cc_uint16)data[offset + 5] << 8)) : 0;
+		offset += data[4] >= 3 ? 6 : 4;
 		if (block == BLOCK_AIR || block >= BLOCK_COUNT || amount == 0) continue;
-		itemCounts[block] = min((int)amount, SURVIVAL_INVENTORY_SLOTS * SURVIVAL_INVENTORY_STACK_SIZE);
-		stackSlots += (itemCounts[block] + SURVIVAL_INVENTORY_STACK_SIZE - 1) / SURVIVAL_INVENTORY_STACK_SIZE;
+		itemCounts[block] = min((int)amount, SURVIVAL_INVENTORY_SLOTS * Survival_ItemMaxStack((BlockID)block));
+		if (Survival_IsTool((BlockID)block)) {
+			int maxDurability = Survival_ToolMaxDurability((BlockID)block);
+			toolDurability[block] = data[4] >= 3 ? min((int)durability, maxDurability) : maxDurability;
+			if (toolDurability[block] <= 0) {
+				itemCounts[block] = 0;
+				continue;
+			}
+		}
+		stackSlots += (itemCounts[block] + Survival_ItemMaxStack((BlockID)block) - 1) / Survival_ItemMaxStack((BlockID)block);
 	}
 	if (stackSlots > SURVIVAL_INVENTORY_SLOTS) {
 		Mem_Set(itemCounts, 0, sizeof(itemCounts));
@@ -835,7 +910,10 @@ static void Survival_Init(void) {
 #ifndef CC_BUILD_TINYMEM
 	Survival_DefineVirtualItems();
 #endif
+	Random_SeedFromCurrentTime(&survivalRng);
 	Survival_Reset();
+	Commands_Register(&SurvivalCraftCommand);
+	Chat_AddRaw("&aSurvival mode enabled. Use /craft help for recipes.");
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	Game.Draw2DHooks[1] = Survival_RenderHUD;
