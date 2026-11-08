@@ -16,6 +16,7 @@ This document describes the current source branch. It is not a claim that a test
 - Left mouse button (hold) — mine the selected block; the progress bar fills while held.
 - Left mouse button — attack a nearby mob.
 - Right mouse button — place the selected block or eat the selected food.
+- T — open chat to enter commands.
 - B — open the inventory picker (default ClassiCube inventory binding).
 - 1–9 — select a hotbar slot.
 - Use the existing Controls menu to change any binding.
