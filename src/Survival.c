@@ -319,6 +319,8 @@ static void Survival_UseToolDurability(BlockID block) {
 	switch (block) {
 	case BLOCK_STONE: case BLOCK_COBBLE: case BLOCK_COAL_ORE:
 	case BLOCK_IRON_ORE: case BLOCK_GOLD_ORE: case BLOCK_OBSIDIAN:
+	case BLOCK_BRICK: case BLOCK_STONE_BRICK: case BLOCK_MOSSY_ROCKS:
+	case BLOCK_SANDSTONE: case BLOCK_GOLD: case BLOCK_IRON:
 		usesTool = held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE || held == BLOCK_ITEM_IRON_PICKAXE;
 		break;
 	case BLOCK_LOG: case BLOCK_WOOD: case BLOCK_BOOKSHELF: case BLOCK_CRATE:
