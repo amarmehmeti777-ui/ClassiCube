@@ -196,12 +196,18 @@ void Survival_OnPlayerPhysics(struct LocalPlayer* player) {
 		return;
 	}
 
-	if (!entity->OnGround && entity->Velocity.y < 0.0f) {
+	/* Water cancels fall damage, as in Minecraft. */
+	if (Entity_TouchesAnyWater(entity)) {
+		fallActive = false;
+		fallDistance = 0.0f;
+	} else if (!entity->OnGround && entity->Velocity.y < 0.0f) {
 		if (!fallActive) {
 			fallActive = true;
 			fallDistance = 0.0f;
+			fallLastY = entity->Position.y;
+		} else if (fallLastY > entity->Position.y) {
+			fallDistance += fallLastY - entity->Position.y;
 		}
-		if (fallLastY > entity->Position.y) fallDistance += fallLastY - entity->Position.y;
 		fallLastY = entity->Position.y;
 	} else if (entity->OnGround && fallActive) {
 		if (fallLastY > entity->Position.y) fallDistance += fallLastY - entity->Position.y;
