@@ -37,6 +37,7 @@ static int toolDurability[BLOCK_COUNT];
 static RNGState survivalRng;
 static cc_bool miningActive;
 static int miningX, miningY, miningZ;
+static void SurvivalItem_Tick(struct Entity* e, float delta);
 static float timeOfDay;
 static int dayCycleStep;
 static BlockID miningBlock;
@@ -209,6 +210,174 @@ void Survival_OnBlockPlaced(BlockID block) {
 	if (Survival_IsActive()) Survival_InventoryRemove(block, 1);
 }
 
+#define SURVIVAL_ITEM_SLOTS 32
+#define SURVIVAL_ITEM_ENTITY_BASE SURVIVAL_MOB_SLOTS
+
+struct SurvivalItem {
+	struct Entity Base;
+	struct HacksComp Hacks;
+	struct PhysicsComp Physics;
+	struct CollisionsComp Collisions;
+	int entityID;
+	BlockID block;
+	int count;
+	float age, pickupDelay;
+	cc_bool active;
+};
+
+static struct SurvivalItem survivalItems[SURVIVAL_ITEM_SLOTS];
+static void SurvivalItem_ClearAll(void);
+
+static struct SurvivalItem* SurvivalItem_FindFree(void) {
+	int i;
+	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
+		int id = SURVIVAL_ITEM_ENTITY_BASE + i;
+		if (!survivalItems[i].active && !Entities.List[id]) return &survivalItems[i];
+	}
+	return NULL;
+}
+
+static int SurvivalItem_FindID(struct SurvivalItem* item) {
+	int i;
+	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
+		if (&survivalItems[i] == item) return SURVIVAL_ITEM_ENTITY_BASE + i;
+	}
+	return -1;
+}
+
+static PackedCol SurvivalItem_GetColor(struct Entity* e) {
+	(void)e;
+	return PACKEDCOL_WHITE;
+}
+
+static void SurvivalItem_Despawn(struct Entity* e) {
+	struct SurvivalItem* item = (struct SurvivalItem*)e;
+	if (e->Flags & ENTITY_FLAG_HAS_MODELVB) Gfx_DeleteScratchVb(&e->ModelVB);
+	item->active = false;
+}
+
+static void SurvivalItem_SetLocation(struct Entity* e, struct LocationUpdate* update) {
+	if (update->flags & LU_HAS_POS) {
+		e->Position = update->pos;
+		e->prev.pos = update->pos;
+		e->next.pos = update->pos;
+	}
+	if (update->flags & LU_HAS_YAW) e->Yaw = update->yaw;
+	if (update->flags & LU_HAS_PITCH) e->Pitch = update->pitch;
+}
+
+static void SurvivalItem_RenderModel(struct Entity* e, float delta, float t) {
+	(void)delta;
+	Vec3_Lerp(&e->Position, &e->prev.pos, &e->next.pos, t);
+	e->ShouldRender = Model_ShouldRender(e);
+	if (e->ShouldRender) Model_Render(e->Model, e);
+}
+
+static cc_bool SurvivalItem_ShouldRenderName(struct Entity* e) {
+	(void)e;
+	return false;
+}
+
+static const struct EntityVTABLE survivalItem_VTABLE = {
+	SurvivalItem_Tick, SurvivalItem_Despawn, SurvivalItem_SetLocation, SurvivalItem_GetColor,
+	SurvivalItem_RenderModel, SurvivalItem_ShouldRenderName
+};
+
+static void SurvivalItem_Tick(struct Entity* e, float delta) {
+	struct SurvivalItem* item = (struct SurvivalItem*)e;
+	struct LocalPlayer* player = Entities.CurPlayer;
+	Vec3 oldPos = e->Position;
+	Vec3 movement = { 0.0f, 0.0f, 0.0f };
+	float dx, dy, dz, distanceSq;
+	int added;
+
+	if (!item->active || !Survival_IsActive() || !World.Loaded) return;
+	item->age += delta;
+	item->pickupDelay -= delta;
+	if (item->age >= 300.0f || e->Position.y < -5.0f) {
+		Entities_Remove(item->entityID);
+		return;
+	}
+
+	PhysicsComp_UpdateVelocityState(&item->Physics);
+	PhysicsComp_PhysicsTick(&item->Physics, movement);
+	e->prev.pos = oldPos;
+	e->next.pos = e->Position;
+	e->Yaw = Math_ClampAngle(e->Yaw + delta * 90.0f);
+	e->Anim.BobbingModel = Math_SinF((float)Game.Time + item->entityID) * 0.045f;
+
+	if (!player || item->pickupDelay > 0.0f) return;
+	dx = player->Base.Position.x - e->Position.x;
+	dy = player->Base.Position.y - e->Position.y;
+	dz = player->Base.Position.z - e->Position.z;
+	distanceSq = dx * dx + dy * dy + dz * dz;
+	if (distanceSq > 1.75f * 1.75f) return;
+
+	added = Survival_InventoryAdd(item->block, item->count);
+	item->count -= added;
+	if (item->count <= 0) Entities_Remove(item->entityID);
+}
+
+static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
+	static const cc_string blockModel = String_FromConst("block");
+	int remaining = amount;
+
+	if (!Survival_IsActive() || block <= BLOCK_AIR || block >= BLOCK_COUNT || amount <= 0) return;
+	while (remaining > 0) {
+		struct SurvivalItem* item = SurvivalItem_FindFree();
+		int id, count;
+		if (!item) {
+			int added = Survival_InventoryAdd(block, remaining);
+			if (added < remaining) Chat_AddRaw("&eThere is no room for more dropped items.");
+			return;
+		}
+
+		id = SurvivalItem_FindID(item);
+		if (id < 0) return;
+		count = min(remaining, SURVIVAL_INVENTORY_STACK_SIZE);
+		Mem_Set(item, 0, sizeof(*item));
+		item->entityID = id;
+		item->block = block;
+		item->count = count;
+		item->pickupDelay = 0.45f;
+		item->active = true;
+
+		Entity_Init(&item->Base);
+		Entity_SetModel(&item->Base, &blockModel);
+		item->Base.ModelBlock = block;
+		Entity_UpdateModelBounds(&item->Base);
+		item->Base.VTABLE = &survivalItem_VTABLE;
+		AnimatedComp_Init(&item->Base.Anim);
+
+		HacksComp_Init(&item->Hacks);
+		item->Hacks.CanBePushed = false;
+		item->Hacks.Floating = false;
+		PhysicsComp_Init(&item->Physics, &item->Base);
+		item->Physics.Hacks = &item->Hacks;
+		item->Physics.Collisions = &item->Collisions;
+		item->Collisions.Entity = &item->Base;
+		item->Collisions.StepSize = 0.5f;
+
+		item->Base.Position = position;
+		item->Base.Position.y += 0.25f;
+		item->Base.prev.pos = item->Base.Position;
+		item->Base.next.pos = item->Base.Position;
+		item->Base.Yaw = (float)Random_Next(&survivalRng, 360);
+		item->Base.Velocity.x = ((float)Random_Next(&survivalRng, 200) - 100.0f) / 1000.0f;
+		item->Base.Velocity.y = 0.12f;
+		item->Base.Velocity.z = ((float)Random_Next(&survivalRng, 200) - 100.0f) / 1000.0f;
+		Entities.List[id] = &item->Base;
+		remaining -= count;
+	}
+}
+
+static void SurvivalItem_ClearAll(void) {
+	int i;
+	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
+		if (survivalItems[i].active) Entities_Remove(survivalItems[i].entityID);
+	}
+}
+
 
 cc_bool Survival_UseItem(BlockID block) {
 	int points = 0;
@@ -364,17 +533,21 @@ static BlockID Survival_GetBlockDrop(BlockID block) {
 	return block;
 }
 
-void Survival_OnBlockBroken(BlockID block) {
+void Survival_OnBlockBroken(BlockID block, int x, int y, int z) {
 	BlockID drop;
+	Vec3 position;
 	if (!Survival_IsActive()) return;
 	drop = Survival_GetBlockDrop(block);
 	Survival_UseToolDurability(block);
-	if (drop != BLOCK_AIR && !Survival_InventoryAdd(drop, 1)) {
-		Chat_AddRaw("&eYour inventory is full; the block drop was lost.");
-	}
+	if (drop == BLOCK_AIR) return;
+	position.x = x + 0.5f;
+	position.y = y + 0.25f;
+	position.z = z + 0.5f;
+	SurvivalItem_Spawn(drop, 1, position);
 }
 
 static void SurvivalMob_ClearAll(void);
+static void SurvivalItem_ClearAll(void);
 static cc_bool Survival_IsNight(void);
 static int SurvivalMob_Count(cc_bool hostileOnly);
 static void Survival_SpawnNightMob(void);
@@ -388,6 +561,7 @@ static void Survival_OnNewMap(void) {
 	Survival_DefineVirtualItems();
 #endif
 	SurvivalMob_ClearAll();
+	SurvivalItem_ClearAll();
 	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
 	timeOfDay = 0.0f;
@@ -1099,10 +1273,9 @@ static void SurvivalMob_ClearAll(void) {
 	hostileSpawnTimer = 0.0f;
 }
 
-static void SurvivalMob_AddDrop(BlockID block, int amount) {
-	if (Survival_InventoryAdd(block, amount) != amount) {
-		Chat_AddRaw("&eSome mob drops were lost because your inventory is full.");
-	}
+static void SurvivalMob_AddDrop(struct SurvivalMob* mob, BlockID block, int amount) {
+	if (!mob || amount <= 0) return;
+	SurvivalItem_Spawn(block, amount, mob->Base.Position);
 }
 
 static void SurvivalMob_Die(struct SurvivalMob* mob) {
@@ -1110,26 +1283,26 @@ static void SurvivalMob_Die(struct SurvivalMob* mob) {
 
 	switch (mob->type) {
 	case SURVIVAL_MOB_PIG:
-		SurvivalMob_AddDrop(BLOCK_ITEM_RAW_PORK, 1 + Random_Next(&survivalRng, 3));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_PORK, 1 + Random_Next(&survivalRng, 3));
 		break;
 	case SURVIVAL_MOB_CHICKEN:
-		SurvivalMob_AddDrop(BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SHEEP:
-		SurvivalMob_AddDrop(BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_ZOMBIE:
-		SurvivalMob_AddDrop(BLOCK_ITEM_ROTTEN_FLESH, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_ROTTEN_FLESH, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SKELETON:
-		SurvivalMob_AddDrop(BLOCK_ITEM_BONE, 1 + Random_Next(&survivalRng, 2));
-		SurvivalMob_AddDrop(BLOCK_ITEM_ARROW, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_BONE, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_ARROW, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_CREEPER:
-		SurvivalMob_AddDrop(BLOCK_ITEM_GUNPOWDER, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_GUNPOWDER, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SPIDER:
-		SurvivalMob_AddDrop(BLOCK_ITEM_STRING, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_STRING, 1 + Random_Next(&survivalRng, 2));
 		break;
 	default:
 		break;
@@ -1361,6 +1534,7 @@ static void Survival_Init(void) {
 
 static void Survival_Free(void) {
 	SurvivalMob_ClearAll();
+	SurvivalItem_ClearAll();
 	Commands_Unregister(&SurvivalCraftCommand);
 	if (Game.Draw2DHooks[1] == Survival_RenderHUD) Game.Draw2DHooks[1] = NULL;
 }
