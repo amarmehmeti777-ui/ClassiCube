@@ -15,6 +15,8 @@
 #include "Platform.h"
 #include "Stream.h"
 #include "Graphics.h"
+#include "Funcs.h"
+#include "Picking.h"
 #include "Server.h"
 #include "World.h"
 
@@ -38,6 +40,7 @@ static RNGState survivalRng;
 static cc_bool miningActive;
 static int miningX, miningY, miningZ;
 static void SurvivalItem_Tick(struct Entity* e, float delta);
+static void Survival_SpawnInitialAnimals(void);
 static float timeOfDay;
 static int dayCycleStep;
 static BlockID miningBlock;
@@ -1312,7 +1315,7 @@ static struct SurvivalMob* SurvivalMob_Spawn(int type, float x, float z) {
 	mob->active = true;
 
 	Entity_Init(&mob->Base);
-	modelName = String_FromConst(modelNames[type]);
+	modelName = String_FromReadonly(modelNames[type]);
 	Entity_SetModel(&mob->Base, &modelName);
 	mob->Base.VTABLE = &survivalMob_VTABLE;
 
