@@ -219,8 +219,9 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[12 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
-	int i, itemTypes = 0, offset = 12;
+	cc_uint8 data[14 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	cc_uint16 dayTicks;
+	int i, itemTypes = 0, offset = 14;
 	cc_result res;
 
 	if (!Survival_IsActive()) return 0;
@@ -230,7 +231,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 1;
+	data[4] = 2;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -238,6 +239,9 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	data[9] = (cc_uint8)min(itemTypes, SURVIVAL_INVENTORY_SLOTS);
 	data[10] = (cc_uint8)max(0, min(Inventory.SelectedIndex, HOTBAR_MAX_INDEX));
 	data[11] = (cc_uint8)max(0, min(Inventory.Offset / INVENTORY_BLOCKS_PER_HOTBAR, INVENTORY_HOTBARS - 1));
+	dayTicks = (cc_uint16)max(0, min((int)(timeOfDay * 2.0f + 0.5f), 2399));
+	data[12] = (cc_uint8)(dayTicks & 0xFF);
+	data[13] = (cc_uint8)(dayTicks >> 8);
 
 	itemTypes = 0;
 	for (i = 1; i < BLOCK_COUNT && itemTypes < data[9]; i++) {
@@ -274,7 +278,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[12 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	cc_uint8 data[14 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
 	cc_uint32 payloadSize;
 	int i, offset, stackSlots = 0;
 	cc_result res;
@@ -284,7 +288,10 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_OpenPath(&stream, &rawPath);
 	/* Older maps have no companion file; keep their fresh Survival state. */
-	if (res) return 0;
+	if (res) {
+		Survival_OnNewMap();
+		return 0;
+	}
 
 	res = Stream_Read(&stream, data, 12);
 	if (res) {
@@ -292,13 +299,13 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		data[4] != 1 || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
 	}
 
-	payloadSize = (cc_uint32)data[9] * 4U +
+	payloadSize = (data[4] == 2 ? 2U : 0U) + (cc_uint32)data[9] * 4U +
 		(cc_uint32)INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2U;
 	res = Stream_Read(&stream, data + 12, payloadSize);
 	if (res) {
@@ -321,6 +328,14 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	Survival_CancelMining();
 
 	offset = 12;
+	if (data[4] == 2) {
+		cc_uint16 savedTicks = (cc_uint16)(data[12] | ((cc_uint16)data[13] << 8));
+		timeOfDay = min((float)savedTicks, 2399.0f) * 0.5f;
+		offset = 14;
+	} else {
+		timeOfDay = 0.0f;
+	}
+	dayCycleStep = -1;
 	for (i = 0; i < data[9]; i++) {
 		cc_uint16 block = (cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8));
 		cc_uint16 amount = (cc_uint16)(data[offset + 2] | ((cc_uint16)data[offset + 3] << 8));
