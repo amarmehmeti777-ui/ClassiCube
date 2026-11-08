@@ -20,6 +20,9 @@ This branch adds a lightweight, local singleplayer Survival layer to ClassiCube.
 - Food can be eaten from the selected hotbar slot.
 - Holding the break input builds mining progress; releasing it or changing targets cancels progress.
 - Basic block harvest rules and drops for common blocks and ores.
+- Broken blocks and defeated mobs create visible dropped-item entities; the player collects them by walking close.
+- Dropped stacks use a fixed 32-entity pool to limit memory and CPU use; overflow is sent to inventory when possible.
+- Dropped items despawn after five minutes.
 - Block placement consumes one item from the inventory.
 - Virtual items include food, sticks, coal, ingots, crafting table, furnace, torches, wooden/stone/iron tools and swords, plus mob drops.
 - Wooden, stone and iron tools and swords have durability.
@@ -37,15 +40,15 @@ This branch adds a lightweight, local singleplayer Survival layer to ClassiCube.
 - The existing ClassiCube singleplayer Notchy generator is used with a 128-block vertical world on normal builds.
 
 ### Saving
-- Survival health, hunger, air, inventory stacks, tool durability, hotbar layout and day/night time are stored in a companion .survival file beside the map.
-- The save sidecar is versioned and has readers for the earlier sidecar versions.
+- Survival health, hunger, air, inventory stacks, tool durability, hotbar layout, day/night time and up to 32 dropped item stacks are stored in a companion .survival file beside the map.
+- The save sidecar is version 4 and retains readers for sidecar versions 1–3.
 - The map's own ClassiCube save format is unchanged.
 
 ## Current limitations — not yet a complete Beta 1.7.3 recreation
 
 - Worlds are finite ClassiCube maps (normally 128 × 128 horizontally and 128 blocks high), not infinite Beta terrain.
 - The Notchy generator is ClassiCube's existing generator, not a faithful Beta 1.7.3 biome/terrain generator.
-- Mined block and mob drops are added directly to the inventory; there are no dropped-item entities or pickup physics. Drops can be lost if the inventory is full.
+- The world-drop system is intentionally capped at 32 simultaneous stacks and drops despawn after five minutes; if the pool is full, new drops are put directly into inventory where possible.
 - Crafting is command-based rather than a Minecraft crafting-grid screen.
 - Furnace recipes are instant commands rather than a burning fuel slot, progress bar and output-slot furnace.
 - Mobs use lightweight basic wandering/chasing and proximity attacks. There is no cow, breeding, projectile combat, creeper explosion, armor, shields, enchantments, or full loot tables yet.
