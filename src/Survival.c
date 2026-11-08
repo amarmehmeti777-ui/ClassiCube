@@ -86,6 +86,17 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_ORE, "Gold ore", BLOCK_GOLD_ORE, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_INGOT, "Iron ingot", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_INGOT, "Gold ingot", BLOCK_GOLD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_ROTTEN_FLESH, "Rotten flesh", BLOCK_BROWN, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_BONE, "Bone", BLOCK_WHITE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_ARROW, "Arrow", BLOCK_GRAY, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GUNPOWDER, "Gunpowder", BLOCK_BLACK, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STRING, "String", BLOCK_WHITE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_WOOD_SWORD, "Wooden sword", BLOCK_WOOD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STONE_SWORD, "Stone sword", BLOCK_STONE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_PICKAXE, "Iron pickaxe", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_AXE, "Iron axe", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_SHOVEL, "Iron shovel", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_SWORD, "Iron sword", BLOCK_IRON, false, false);
 }
 #endif
 
@@ -99,15 +110,17 @@ cc_bool Survival_IsActive(void) {
 #define Survival_Active Survival_IsActive
 
 static cc_bool Survival_IsTool(BlockID block) {
-	return block == BLOCK_ITEM_WOOD_PICKAXE || block == BLOCK_ITEM_STONE_PICKAXE ||
-		block == BLOCK_ITEM_WOOD_AXE || block == BLOCK_ITEM_STONE_AXE ||
-		block == BLOCK_ITEM_WOOD_SHOVEL || block == BLOCK_ITEM_STONE_SHOVEL;
+	return block == BLOCK_ITEM_WOOD_PICKAXE || block == BLOCK_ITEM_STONE_PICKAXE || block == BLOCK_ITEM_IRON_PICKAXE ||
+		block == BLOCK_ITEM_WOOD_AXE || block == BLOCK_ITEM_STONE_AXE || block == BLOCK_ITEM_IRON_AXE ||
+		block == BLOCK_ITEM_WOOD_SHOVEL || block == BLOCK_ITEM_STONE_SHOVEL || block == BLOCK_ITEM_IRON_SHOVEL ||
+		block == BLOCK_ITEM_WOOD_SWORD || block == BLOCK_ITEM_STONE_SWORD || block == BLOCK_ITEM_IRON_SWORD;
 }
 
 static int Survival_ToolMaxDurability(BlockID block) {
 	switch (block) {
-	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: return 60;
-	case BLOCK_ITEM_STONE_PICKAXE: case BLOCK_ITEM_STONE_AXE: case BLOCK_ITEM_STONE_SHOVEL: return 132;
+	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: case BLOCK_ITEM_WOOD_SWORD: return 60;
+	case BLOCK_ITEM_STONE_PICKAXE: case BLOCK_ITEM_STONE_AXE: case BLOCK_ITEM_STONE_SHOVEL: case BLOCK_ITEM_STONE_SWORD: return 132;
+	case BLOCK_ITEM_IRON_PICKAXE: case BLOCK_ITEM_IRON_AXE: case BLOCK_ITEM_IRON_SHOVEL: case BLOCK_ITEM_IRON_SWORD: return 251;
 	default: return 0;
 	}
 }
@@ -232,19 +245,20 @@ static float Survival_GetBlockMiningTime(BlockID block) {
 	case BLOCK_COAL_ORE: case BLOCK_BRICK: case BLOCK_STONE_BRICK: case BLOCK_MOSSY_ROCKS:
 		time = Survival_HasPickaxe() ? 1.8f : 5.0f;
 		if (held == BLOCK_ITEM_STONE_PICKAXE) time *= 0.55f;
+		if (held == BLOCK_ITEM_IRON_PICKAXE) time *= 0.40f;
 		break;
 	case BLOCK_LOG: case BLOCK_WOOD: case BLOCK_BOOKSHELF: case BLOCK_CRATE:
 		time = 1.0f;
-		if ((held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE) && toolDurability[held] > 0) time *= 0.35f;
+		if ((held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE || held == BLOCK_ITEM_IRON_AXE) && toolDurability[held] > 0) time *= 0.35f;
 		break;
 	case BLOCK_DIRT: case BLOCK_GRASS: case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
 		time = 0.5f;
-		if ((held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL) && toolDurability[held] > 0) time *= 0.35f;
+		if ((held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL) && toolDurability[held] > 0) time *= 0.35f;
 		break;
 	case BLOCK_LEAVES: case BLOCK_SAPLING: case BLOCK_DANDELION: case BLOCK_ROSE:
 	case BLOCK_BROWN_SHROOM: case BLOCK_RED_SHROOM:
 		time = 0.5f;
-		if ((held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE) && toolDurability[held] > 0) time *= 0.4f;
+		if ((held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE || held == BLOCK_ITEM_IRON_AXE) && toolDurability[held] > 0) time *= 0.4f;
 		break;
 	default: time = 1.0f; break;
 	}
@@ -282,12 +296,17 @@ cc_bool Survival_MineBlock(int x, int y, int z, BlockID block, float elapsed) {
 
 static cc_bool Survival_HasPickaxe(void) {
 	BlockID held = Inventory_SelectedBlock;
-	return (held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE) && toolDurability[held] > 0;
+	return (held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE || held == BLOCK_ITEM_IRON_PICKAXE) && toolDurability[held] > 0;
 }
 
 static cc_bool Survival_HasStonePickaxe(void) {
 	BlockID held = Inventory_SelectedBlock;
-	return held == BLOCK_ITEM_STONE_PICKAXE && toolDurability[held] > 0;
+	return (held == BLOCK_ITEM_STONE_PICKAXE || held == BLOCK_ITEM_IRON_PICKAXE) && toolDurability[held] > 0;
+}
+
+static cc_bool Survival_HasIronPickaxe(void) {
+	BlockID held = Inventory_SelectedBlock;
+	return held == BLOCK_ITEM_IRON_PICKAXE && toolDurability[held] > 0;
 }
 
 static void Survival_UseToolDurability(BlockID block) {
@@ -298,13 +317,13 @@ static void Survival_UseToolDurability(BlockID block) {
 	switch (block) {
 	case BLOCK_STONE: case BLOCK_COBBLE: case BLOCK_COAL_ORE:
 	case BLOCK_IRON_ORE: case BLOCK_GOLD_ORE: case BLOCK_OBSIDIAN:
-		usesTool = held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE;
+		usesTool = held == BLOCK_ITEM_WOOD_PICKAXE || held == BLOCK_ITEM_STONE_PICKAXE || held == BLOCK_ITEM_IRON_PICKAXE;
 		break;
 	case BLOCK_LOG: case BLOCK_WOOD: case BLOCK_BOOKSHELF: case BLOCK_CRATE:
-		usesTool = held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE;
+		usesTool = held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE || held == BLOCK_ITEM_IRON_AXE;
 		break;
 	case BLOCK_DIRT: case BLOCK_GRASS: case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
-		usesTool = held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL;
+		usesTool = held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL;
 		break;
 	}
 	if (!usesTool) return;
@@ -321,7 +340,7 @@ static BlockID Survival_GetBlockDrop(BlockID block) {
 	if (block == BLOCK_STONE) return Survival_HasPickaxe() ? BLOCK_COBBLE : BLOCK_AIR;
 	if (block == BLOCK_COAL_ORE) return Survival_HasPickaxe() ? BLOCK_ITEM_COAL : BLOCK_AIR;
 	if (block == BLOCK_IRON_ORE) return Survival_HasStonePickaxe() ? BLOCK_ITEM_IRON_ORE : BLOCK_AIR;
-	if (block == BLOCK_GOLD_ORE) return Survival_HasStonePickaxe() ? BLOCK_ITEM_GOLD_ORE : BLOCK_AIR;
+	if (block == BLOCK_GOLD_ORE) return Survival_HasIronPickaxe() ? BLOCK_ITEM_GOLD_ORE : BLOCK_AIR;
 	if (block == BLOCK_LEAVES) {
 		if (Random_Next(&survivalRng, 200) == 0) return BLOCK_ITEM_APPLE;
 		if (Random_Next(&survivalRng, 20) == 0) return BLOCK_SAPLING;
@@ -845,8 +864,10 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft table &7- 4 planks to a crafting table");
 		Chat_AddRaw("&a/craft furnace &7- 8 cobblestone to a furnace");
 		Chat_AddRaw("&a/craft torch &7- 1 coal + 1 stick to 4 torches");
-		Chat_AddRaw("&a/craft wooden_pickaxe|stone_pickaxe|wooden_axe|stone_axe");
-		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel");
+			Chat_AddRaw("&a/craft wooden_pickaxe|stone_pickaxe|iron_pickaxe");
+		Chat_AddRaw("&a/craft wooden_axe|stone_axe|iron_axe");
+		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel|iron_shovel");
+		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
 		Chat_AddRaw("&a/craft smelt_iron|smelt_gold|cook_pork|cook_beef|cook_chicken");
 		return;
 	}
@@ -873,6 +894,18 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_WOOD, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_WOOD_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "stone_shovel")) {
 		Survival_CraftRecipe(BLOCK_COBBLE, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_pickaxe")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_axe")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_AXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_shovel")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "wooden_sword")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 2, BLOCK_ITEM_STICK, 1, BLOCK_ITEM_WOOD_SWORD, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "stone_sword")) {
+		Survival_CraftRecipe(BLOCK_COBBLE, 2, BLOCK_ITEM_STICK, 1, BLOCK_ITEM_STONE_SWORD, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_sword")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_ITEM_STICK, 1, BLOCK_ITEM_IRON_SWORD, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "smelt_iron")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_ORE, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_IRON_INGOT, 1, BLOCK_ITEM_FURNACE);
 	} else if (String_CaselessEqualsConst(recipe, "smelt_gold")) {
@@ -1049,18 +1082,37 @@ static void SurvivalMob_ClearAll(void) {
 	hostileSpawnTimer = 0.0f;
 }
 
+static void SurvivalMob_AddDrop(BlockID block, int amount) {
+	if (Survival_InventoryAdd(block, amount) != amount) {
+		Chat_AddRaw("&eSome mob drops were lost because your inventory is full.");
+	}
+}
+
 static void SurvivalMob_Die(struct SurvivalMob* mob) {
 	if (!mob || !mob->active) return;
 
 	switch (mob->type) {
 	case SURVIVAL_MOB_PIG:
-		Survival_InventoryAdd(BLOCK_ITEM_RAW_PORK, 1 + Random_Next(&survivalRng, 3));
+		SurvivalMob_AddDrop(BLOCK_ITEM_RAW_PORK, 1 + Random_Next(&survivalRng, 3));
 		break;
 	case SURVIVAL_MOB_CHICKEN:
-		Survival_InventoryAdd(BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SHEEP:
-		Survival_InventoryAdd(BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
+		break;
+	case SURVIVAL_MOB_ZOMBIE:
+		SurvivalMob_AddDrop(BLOCK_ITEM_ROTTEN_FLESH, 1 + Random_Next(&survivalRng, 2));
+		break;
+	case SURVIVAL_MOB_SKELETON:
+		SurvivalMob_AddDrop(BLOCK_ITEM_BONE, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(BLOCK_ITEM_ARROW, 1 + Random_Next(&survivalRng, 2));
+		break;
+	case SURVIVAL_MOB_CREEPER:
+		SurvivalMob_AddDrop(BLOCK_ITEM_GUNPOWDER, 1 + Random_Next(&survivalRng, 2));
+		break;
+	case SURVIVAL_MOB_SPIDER:
+		SurvivalMob_AddDrop(BLOCK_ITEM_STRING, 1 + Random_Next(&survivalRng, 2));
 		break;
 	default:
 		break;
@@ -1201,8 +1253,22 @@ cc_bool Survival_AttackMob(void) {
 	}
 	if (mob->hurtTimer > 0.0f) return true;
 
-	damage = Inventory_SelectedBlock == BLOCK_ITEM_WOOD_AXE || Inventory_SelectedBlock == BLOCK_ITEM_STONE_AXE ? 4 : 2;
-	mob->health -= damage;
+	{
+		BlockID held = Inventory_SelectedBlock;
+		damage = 2;
+		if (held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE || held == BLOCK_ITEM_IRON_AXE) damage = 4;
+		if (held == BLOCK_ITEM_WOOD_SWORD) damage = 4;
+		if (held == BLOCK_ITEM_STONE_SWORD) damage = 5;
+		if (held == BLOCK_ITEM_IRON_SWORD) damage = 6;
+		mob->health -= damage;
+		if (Survival_IsTool(held)) {
+			toolDurability[held]--;
+			if (toolDurability[held] <= 0) {
+				Chat_AddRaw("&cYour weapon broke.");
+				Survival_InventoryRemove(held, 1);
+			}
+		}
+	}
 	mob->hurtTimer = 0.45f;
 	Survival_CancelMining();
 	if (mob->health <= 0) SurvivalMob_Die(mob);
