@@ -217,6 +217,9 @@ cc_bool Survival_UseItem(BlockID block) {
 }
 
 
+static cc_bool Survival_HasPickaxe(void);
+static cc_bool Survival_HasStonePickaxe(void);
+
 static float Survival_GetBlockMiningTime(BlockID block) {
 	BlockID held = Inventory_SelectedBlock;
 	float time;
@@ -427,7 +430,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 4 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2];
 	cc_uint32 payloadSize;
 	int i, offset, stackSlots = 0;
 	cc_result res;
@@ -906,6 +909,13 @@ static void Survival_RenderHUD(float delta) {
 	}
 }
 
+static void Survival_ComponentReset(void) {
+#ifndef CC_BUILD_TINYMEM
+	Survival_DefineVirtualItems();
+#endif
+	Survival_Reset();
+}
+
 static void Survival_Init(void) {
 #ifndef CC_BUILD_TINYMEM
 	Survival_DefineVirtualItems();
@@ -932,7 +942,7 @@ static void Survival_Free(void) {
 struct IGameComponent Survival_Component = {
 	Survival_Init,
 	Survival_Free,
-	Survival_Reset,
+	Survival_ComponentReset,
 	Survival_OnNewMap,
 	NULL,
 	NULL
