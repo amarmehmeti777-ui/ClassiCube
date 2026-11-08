@@ -24,10 +24,12 @@ jobs:
           COMMON_CFLAGS="-fno-stack-protector -DCC_NOMAIN -fno-ident"
           COMMON_LDFLAGS="-nostartfiles -Wl,-e_main_real"
 
-          make windows clean
+          make windows clean TARGET=cc-w32-d3d9
           make windows RELEASE=1 TARGET=cc-w32-d3d9 CC=i686-w64-mingw32-gcc \
             EXTRA_CFLAGS="$COMMON_CFLAGS" \
             EXTRA_LDFLAGS="$COMMON_LDFLAGS"
+          mkdir -p survival-artifacts
+          cp cc-w32-d3d9.exe survival-artifacts/
 
       - name: Build OpenGL 1.1 client
         shell: bash
@@ -35,17 +37,16 @@ jobs:
           COMMON_CFLAGS="-fno-stack-protector -DCC_NOMAIN -fno-ident"
           COMMON_LDFLAGS="-nostartfiles -Wl,-e_main_real"
 
-          make windows clean
+          make windows clean TARGET=cc-w32-ogl
           make windows RELEASE=1 TARGET=cc-w32-ogl CC=i686-w64-mingw32-gcc \
             EXTRA_CFLAGS="$COMMON_CFLAGS -DCC_GFX_BACKEND=CC_GFX_BACKEND_GL1" \
             EXTRA_LDFLAGS="$COMMON_LDFLAGS"
+          cp cc-w32-ogl.exe survival-artifacts/
 
       - name: Upload playable Windows builds
         uses: actions/upload-artifact@v4
         with:
           name: ClassiCube-Survival-Windows-32-bit
-          path: |
-            cc-w32-d3d9.exe
-            cc-w32-ogl.exe
+          path: survival-artifacts/*.exe
           if-no-files-found: error
           retention-days: 14
