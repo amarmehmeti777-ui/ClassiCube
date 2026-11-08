@@ -1589,6 +1589,9 @@ static void Survival_RenderHUD(float delta) {
 }
 
 static void Survival_ComponentReset(void) {
+	/* Remove local Survival entities before switching maps or game modes. */
+	SurvivalMob_ClearAll();
+	SurvivalItem_ClearAll();
 	Survival_Reset();
 }
 
