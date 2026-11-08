@@ -917,7 +917,7 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 	} else if (String_CaselessEqualsConst(recipe, "cook_chicken")) {
 		Survival_CraftRecipe(BLOCK_ITEM_RAW_CHICKEN, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_CHICKEN, 1, BLOCK_ITEM_FURNACE);
 	} else {
-		Chat_AddRaw("&eUnknown recipe. Use /craft help.");
+		Chat_AddRaw("&eUnknown recipe. Use /client craft help.");
 	}
 }
 
@@ -925,7 +925,7 @@ static struct ChatCommand SurvivalCraftCommand = {
 	"craft", SurvivalCraftCommand_Execute,
 	COMMAND_FLAG_SINGLEPLAYER_ONLY,
 	{
-		"&a/craft [recipe]",
+		"&a/client craft [recipe]",
 		"&eCraft Survival materials, blocks, food and tools.",
 	}
 };
@@ -1276,9 +1276,22 @@ cc_bool Survival_AttackMob(void) {
 }
 
 static void Survival_OnNewMapLoaded(void) {
+	int i;
 	if (!Survival_IsActive()) return;
+#ifndef CC_BUILD_TINYMEM
+	Survival_DefineVirtualItems();
+#endif
+	/* Clear default entries appended by custom block registration before loading Survival inventory. */
+	Mem_Set(itemCounts, 0, sizeof(itemCounts));
+	Mem_Set(toolDurability, 0, sizeof(toolDurability));
+	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) Inventory.Table[i] = BLOCK_AIR;
+	Inventory.SelectedIndex = 0;
+	Inventory.Offset = 0;
+	Survival_RefreshInventoryMap();
+	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
 	SurvivalMob_ClearAll();
 	Survival_SpawnInitialAnimals();
+	Chat_AddRaw("&aSurvival Mode enabled. Use /client craft help for recipes.");
 }
 
 static void Survival_DrawMeter(int x, int y, int value, PackedCol fill) {
@@ -1323,22 +1336,13 @@ static void Survival_RenderHUD(float delta) {
 }
 
 static void Survival_ComponentReset(void) {
-#ifndef CC_BUILD_TINYMEM
-	if (!Game_ClassicMode) Survival_DefineVirtualItems();
-#endif
 	Survival_Reset();
 }
 
 static void Survival_Init(void) {
-#ifndef CC_BUILD_TINYMEM
-	if (!Game_ClassicMode) Survival_DefineVirtualItems();
-#endif
 	Random_SeedFromCurrentTime(&survivalRng);
 	Survival_Reset();
 	Commands_Register(&SurvivalCraftCommand);
-	if (Server.IsSinglePlayer && !Game_ClassicMode) {
-		Chat_AddRaw("&aSurvival mode enabled. Use /craft help for recipes.");
-	}
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	Game.Draw2DHooks[1] = Survival_RenderHUD;
