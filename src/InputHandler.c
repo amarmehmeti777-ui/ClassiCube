@@ -403,7 +403,7 @@ static cc_bool CheckIsFree(BlockID block) {
 	return true;
 }
 
-static void InputHandler_DeleteBlock(void) {
+static void InputHandler_DeleteBlock(float elapsed) {
 	IVec3 pos;
 	BlockID old;
 	/* always play delete animations, even if we aren't deleting a block */
@@ -417,7 +417,7 @@ static void InputHandler_DeleteBlock(void) {
 		Survival_CancelMining();
 		return;
 	}
-	if (!Survival_MineBlock(pos.x, pos.y, pos.z, old)) return;
+	if (!Survival_MineBlock(pos.x, pos.y, pos.z, old, elapsed)) return;
 
 	Game_ChangeBlock(pos.x, pos.y, pos.z, BLOCK_AIR);
 	Survival_OnBlockBroken(old);
@@ -497,9 +497,11 @@ void InputHandler_Tick(float delta) {
 	}
 
 	if (left) {
-		InputHandler_DeleteBlock();
+		InputHandler_DeleteBlock(0.25f);
 	} else if (right) {
 		InputHandler_PlaceBlock();
+	} else {
+		Survival_CancelMining();
 	} else if (middle) {
 		InputHandler_PickBlock();
 	}
@@ -538,7 +540,8 @@ static void CheckBlockTap(int i) {
 	MouseStatePress(btn);
 
 	if (btn == MOUSE_LEFT) { 
-		InputHandler_DeleteBlock();
+		InputHandler_DeleteBlock(0.0f);
+		Survival_CancelMining();
 	} else { 
 		InputHandler_PlaceBlock();
 	}
@@ -607,7 +610,7 @@ static cc_bool BindTriggered_DeleteBlock(int key, struct InputDevice* device) {
 	if (Gui.InputGrab) return false;
 	
 	MouseStatePress(MOUSE_LEFT);
-	InputHandler_DeleteBlock();
+	InputHandler_DeleteBlock(0.0f);
 	return true;
 }
 

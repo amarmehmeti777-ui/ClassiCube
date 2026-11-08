@@ -18,7 +18,7 @@ int  Survival_InventoryAdd(BlockID block, int amount);
 cc_bool Survival_CanPlaceBlock(BlockID block);
 void Survival_OnBlockBroken(BlockID block);
 void Survival_OnBlockPlaced(BlockID block);
-cc_bool Survival_MineBlock(int x, int y, int z, BlockID block);
+cc_bool Survival_MineBlock(int x, int y, int z, BlockID block, float elapsed);
 void Survival_CancelMining(void);
 float Survival_GetMiningProgress(void);
 void Survival_RenderItemCount(int x, int y, BlockID block);

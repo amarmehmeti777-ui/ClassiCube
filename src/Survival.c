@@ -148,7 +148,7 @@ float Survival_GetMiningProgress(void) {
 	return miningActive ? min(1.0f, miningProgress / Survival_GetBlockMiningTime(miningBlock)) : 0.0f;
 }
 
-cc_bool Survival_MineBlock(int x, int y, int z, BlockID block) {
+cc_bool Survival_MineBlock(int x, int y, int z, BlockID block, float elapsed) {
 	float required;
 	if (!Survival_IsActive()) return true;
 
@@ -159,8 +159,8 @@ cc_bool Survival_MineBlock(int x, int y, int z, BlockID block) {
 		miningProgress = 0.0f;
 	}
 
-	/* InputHandler_Tick calls this four times per second while the button is held. */
-	miningProgress += 0.25f;
+	/* InputHandler_Tick supplies elapsed time while the button is held; press-only calls start mining. */
+	if (elapsed > 0.0f) miningProgress += elapsed;
 	required = Survival_GetBlockMiningTime(block);
 	if (miningProgress < required) return false;
 
