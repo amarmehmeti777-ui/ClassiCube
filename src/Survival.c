@@ -349,6 +349,7 @@ static void Survival_OnNewMap(void) {
 	int i;
 	if (!Server.IsSinglePlayer) return;
 	SurvivalMob_ClearAll();
+	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
@@ -921,6 +922,7 @@ static cc_bool SurvivalMob_IsHostile(const struct SurvivalMob* mob) {
 }
 
 static PackedCol SurvivalMob_GetColor(struct Entity* e) {
+	(void)e;
 	return PACKEDCOL_WHITE;
 }
 
@@ -941,6 +943,7 @@ static void SurvivalMob_SetLocation(struct Entity* e, struct LocationUpdate* upd
 }
 
 static void SurvivalMob_RenderModel(struct Entity* e, float delta, float t) {
+	(void)delta;
 	Vec3_Lerp(&e->Position, &e->prev.pos, &e->next.pos, t);
 	AnimatedComp_GetCurrent(e, t);
 	e->ShouldRender = Model_ShouldRender(e);
@@ -948,6 +951,7 @@ static void SurvivalMob_RenderModel(struct Entity* e, float delta, float t) {
 }
 
 static cc_bool SurvivalMob_ShouldRenderName(struct Entity* e) {
+	(void)e;
 	return false;
 }
 
@@ -1161,6 +1165,8 @@ cc_bool Survival_AttackMob(void) {
 	struct SurvivalMob* mob = NULL;
 	struct Entity* target;
 	float dx, dy, dz, distance;
+	Vec3 eye;
+	float blockDX, blockDY, blockDZ, blockDistance;
 
 	if (!Survival_IsActive() || !Entities.CurPlayer) return false;
 	id = Entities_GetClosest(&Entities.CurPlayer->Base);
@@ -1177,6 +1183,15 @@ cc_bool Survival_AttackMob(void) {
 	dz = target->Position.z - Entities.CurPlayer->Base.Position.z;
 	distance = Math_SqrtF(dx * dx + dy * dy + dz * dz);
 	if (distance > 4.5f) return false;
+	/* Do not hit a mob through the nearer block selected by the normal block ray. */
+	if (Game_SelectedPos.valid) {
+		eye = Entity_GetEyePosition(&Entities.CurPlayer->Base);
+		blockDX = (float)Game_SelectedPos.pos.x + 0.5f - eye.x;
+		blockDY = (float)Game_SelectedPos.pos.y + 0.5f - eye.y;
+		blockDZ = (float)Game_SelectedPos.pos.z + 0.5f - eye.z;
+		blockDistance = Math_SqrtF(blockDX * blockDX + blockDY * blockDY + blockDZ * blockDZ);
+		if (blockDistance + 0.2f < distance) return false;
+	}
 	if (mob->hurtTimer > 0.0f) return true;
 
 	damage = Inventory_SelectedBlock == BLOCK_ITEM_WOOD_AXE || Inventory_SelectedBlock == BLOCK_ITEM_STONE_AXE ? 4 : 2;
