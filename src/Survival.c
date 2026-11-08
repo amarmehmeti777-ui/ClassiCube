@@ -940,7 +940,7 @@ static void Survival_UpdateDayNight(float delta) {
 
 static cc_bool Survival_Tick(struct ScheduledTask2* task) {
 	const float dt = task->interval;
-	if (!Server.IsSinglePlayer || !World.Loaded) return true;
+	if (!Survival_IsActive()) return true;
 	Survival_UpdateDayNight(dt);
 	if (Survival_IsNight()) {
 		hostileSpawnTimer += dt;
