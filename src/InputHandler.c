@@ -427,7 +427,7 @@ static void InputHandler_DeleteBlock(float elapsed) {
 	if (!Survival_MineBlock(pos.x, pos.y, pos.z, old, elapsed)) return;
 
 	Game_ChangeBlock(pos.x, pos.y, pos.z, BLOCK_AIR);
-	Survival_OnBlockBroken(old);
+	Survival_OnBlockBroken(old, pos.x, pos.y, pos.z);
 	Event_RaiseBlock(&UserEvents.BlockChanged, pos, old, BLOCK_AIR);
 }
 
