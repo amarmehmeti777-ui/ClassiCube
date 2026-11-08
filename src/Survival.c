@@ -28,6 +28,10 @@ static cc_bool fallActive, hasLastPosition, jumpWasRising;
 static float fallDistance, fallLastY, lastX, lastZ;
 static struct ScheduledTask2 survivalTask;
 static int itemCounts[BLOCK_COUNT];
+static cc_bool miningActive;
+static int miningX, miningY, miningZ;
+static BlockID miningBlock;
+static float miningProgress;
 
 cc_bool Survival_IsActive(void) {
 	return Server.IsSinglePlayer && !Game_ClassicMode && World.Loaded;
@@ -103,6 +107,65 @@ cc_bool Survival_CanPlaceBlock(BlockID block) {
 
 void Survival_OnBlockPlaced(BlockID block) {
 	if (Survival_IsActive()) Survival_InventoryRemove(block, 1);
+}
+
+static float Survival_GetBlockMiningTime(BlockID block) {
+	switch (block) {
+	case BLOCK_OBSIDIAN: return 8.0f;
+	case BLOCK_STONE:
+	case BLOCK_COBBLE:
+	case BLOCK_GOLD_ORE:
+	case BLOCK_IRON_ORE:
+	case BLOCK_COAL_ORE:
+	case BLOCK_BRICK:
+	case BLOCK_STONE_BRICK:
+	case BLOCK_MOSSY_ROCKS: return 2.0f;
+	case BLOCK_LOG:
+	case BLOCK_WOOD:
+	case BLOCK_BOOKSHELF:
+	case BLOCK_CRATE: return 1.0f;
+	case BLOCK_DIRT:
+	case BLOCK_GRASS:
+	case BLOCK_SAND:
+	case BLOCK_GRAVEL:
+	case BLOCK_SNOW: return 0.5f;
+	case BLOCK_LEAVES:
+	case BLOCK_SAPLING:
+	case BLOCK_DANDELION:
+	case BLOCK_ROSE:
+	case BLOCK_BROWN_SHROOM:
+	case BLOCK_RED_SHROOM: return 0.5f;
+	default: return 1.0f;
+	}
+}
+
+void Survival_CancelMining(void) {
+	miningActive = false;
+	miningProgress = 0.0f;
+}
+
+float Survival_GetMiningProgress(void) {
+	return miningActive ? min(1.0f, miningProgress / Survival_GetBlockMiningTime(miningBlock)) : 0.0f;
+}
+
+cc_bool Survival_MineBlock(int x, int y, int z, BlockID block) {
+	float required;
+	if (!Survival_IsActive()) return true;
+
+	if (!miningActive || miningX != x || miningY != y || miningZ != z || miningBlock != block) {
+		miningActive = true;
+		miningX = x; miningY = y; miningZ = z;
+		miningBlock = block;
+		miningProgress = 0.0f;
+	}
+
+	/* InputHandler_Tick calls this four times per second while the button is held. */
+	miningProgress += 0.25f;
+	required = Survival_GetBlockMiningTime(block);
+	if (miningProgress < required) return false;
+
+	Survival_CancelMining();
+	return true;
 }
 
 static BlockID Survival_GetBlockDrop(BlockID block) {
@@ -251,6 +314,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	drowningTimer = hazardTimer = starvationTimer = regenerationTimer = deathTimer = 0.0f;
 	fallActive = hasLastPosition = jumpWasRising = false;
 	fallDistance = fallLastY = lastX = lastZ = 0.0f;
+	Survival_CancelMining();
 
 	offset = 12;
 	for (i = 0; i < data[9]; i++) {
@@ -523,6 +587,13 @@ static void Survival_RenderHUD(float delta) {
 	if (airSeconds < SURVIVAL_MAX_AIR) {
 		int airValue = (int)((airSeconds / SURVIVAL_MAX_AIR) * 20.0f + 0.5f);
 		Survival_DrawMeter((Game.Width - 100) / 2, y - 13, airValue, airCol);
+	}
+	if (miningActive) {
+		int barX = (Game.Width - 66) / 2;
+		int barY = Game.Height / 2 + 18;
+		int barWidth = (int)(64.0f * Survival_GetMiningProgress());
+		Gfx_Draw2DFlat(barX - 1, barY - 1, 66, 7, PackedCol_Make(0, 0, 0, 200));
+		if (barWidth > 0) Gfx_Draw2DFlat(barX, barY, barWidth, 5, PackedCol_Make(235, 180, 65, 255));
 	}
 }
 

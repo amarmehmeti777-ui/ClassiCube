@@ -413,7 +413,11 @@ static void InputHandler_DeleteBlock(void) {
 	if (!Game_SelectedPos.valid || !World_Contains(pos.x, pos.y, pos.z)) return;
 
 	old = World_GetBlock(pos.x, pos.y, pos.z);
-	if (Blocks.Draw[old] == DRAW_GAS || !Blocks.CanDelete[old]) return;
+	if (Blocks.Draw[old] == DRAW_GAS || !Blocks.CanDelete[old]) {
+		Survival_CancelMining();
+		return;
+	}
+	if (!Survival_MineBlock(pos.x, pos.y, pos.z, old)) return;
 
 	Game_ChangeBlock(pos.x, pos.y, pos.z, BLOCK_AIR);
 	Survival_OnBlockBroken(old);
@@ -625,6 +629,7 @@ static cc_bool BindTriggered_PickBlock(int key, struct InputDevice* device) {
 
 static void BindReleased_DeleteBlock(int key, struct InputDevice* device) {
 	MouseStateRelease(MOUSE_LEFT);
+	Survival_CancelMining();
 }
 
 static void BindReleased_PlaceBlock(int key, struct InputDevice* device) {
