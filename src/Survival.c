@@ -214,6 +214,7 @@ cc_bool Survival_UseItem(BlockID block) {
 	case BLOCK_ITEM_APPLE: points = 4; sat = 2.4f; break;
 	case BLOCK_ITEM_BREAD: points = 5; sat = 6.0f; break;
 	case BLOCK_ITEM_RAW_PORK: points = 3; sat = 1.8f; break;
+	case BLOCK_ITEM_ROTTEN_FLESH: points = 2; sat = 0.4f; break;
 	case BLOCK_ITEM_COOKED_PORK: points = 8; sat = 12.8f; break;
 	case BLOCK_ITEM_RAW_BEEF: points = 3; sat = 1.8f; break;
 	case BLOCK_ITEM_COOKED_BEEF: points = 8; sat = 12.8f; break;
@@ -243,6 +244,7 @@ static float Survival_GetBlockMiningTime(BlockID block) {
 	case BLOCK_OBSIDIAN: time = 8.0f; break;
 	case BLOCK_STONE: case BLOCK_COBBLE: case BLOCK_GOLD_ORE: case BLOCK_IRON_ORE:
 	case BLOCK_COAL_ORE: case BLOCK_BRICK: case BLOCK_STONE_BRICK: case BLOCK_MOSSY_ROCKS:
+	case BLOCK_SANDSTONE: case BLOCK_GOLD: case BLOCK_IRON:
 		time = Survival_HasPickaxe() ? 1.8f : 5.0f;
 		if (held == BLOCK_ITEM_STONE_PICKAXE) time *= 0.55f;
 		if (held == BLOCK_ITEM_IRON_PICKAXE) time *= 0.40f;
@@ -338,9 +340,13 @@ static void Survival_UseToolDurability(BlockID block) {
 static BlockID Survival_GetBlockDrop(BlockID block) {
 	if (block == BLOCK_GRASS) return BLOCK_DIRT;
 	if (block == BLOCK_STONE) return Survival_HasPickaxe() ? BLOCK_COBBLE : BLOCK_AIR;
+	if (block == BLOCK_COBBLE || block == BLOCK_BRICK || block == BLOCK_STONE_BRICK ||
+		block == BLOCK_MOSSY_ROCKS || block == BLOCK_SANDSTONE) return Survival_HasPickaxe() ? block : BLOCK_AIR;
 	if (block == BLOCK_COAL_ORE) return Survival_HasPickaxe() ? BLOCK_ITEM_COAL : BLOCK_AIR;
 	if (block == BLOCK_IRON_ORE) return Survival_HasStonePickaxe() ? BLOCK_ITEM_IRON_ORE : BLOCK_AIR;
 	if (block == BLOCK_GOLD_ORE) return Survival_HasIronPickaxe() ? BLOCK_ITEM_GOLD_ORE : BLOCK_AIR;
+	if (block == BLOCK_GOLD || block == BLOCK_IRON) return Survival_HasIronPickaxe() ? block : BLOCK_AIR;
+	if (block == BLOCK_OBSIDIAN) return BLOCK_AIR;
 	if (block == BLOCK_LEAVES) {
 		if (Random_Next(&survivalRng, 200) == 0) return BLOCK_ITEM_APPLE;
 		if (Random_Next(&survivalRng, 20) == 0) return BLOCK_SAPLING;
@@ -864,7 +870,7 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft table &7- 4 planks to a crafting table");
 		Chat_AddRaw("&a/craft furnace &7- 8 cobblestone to a furnace");
 		Chat_AddRaw("&a/craft torch &7- 1 coal + 1 stick to 4 torches");
-			Chat_AddRaw("&a/craft wooden_pickaxe|stone_pickaxe|iron_pickaxe");
+		Chat_AddRaw("&a/craft wooden_pickaxe|stone_pickaxe|iron_pickaxe");
 		Chat_AddRaw("&a/craft wooden_axe|stone_axe|iron_axe");
 		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel|iron_shovel");
 		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
