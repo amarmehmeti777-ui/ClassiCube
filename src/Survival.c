@@ -337,7 +337,9 @@ void Survival_OnBlockBroken(BlockID block) {
 	if (!Survival_IsActive()) return;
 	drop = Survival_GetBlockDrop(block);
 	Survival_UseToolDurability(block);
-	if (drop != BLOCK_AIR) Survival_InventoryAdd(drop, 1);
+	if (drop != BLOCK_AIR && !Survival_InventoryAdd(drop, 1)) {
+		Chat_AddRaw("&eYour inventory is full; the block drop was lost.");
+	}
 }
 
 static void SurvivalMob_ClearAll(void);
@@ -814,14 +816,21 @@ static cc_bool Survival_CraftRecipe(BlockID inputA, int amountA, BlockID inputB,
 		Chat_AddRaw("&eYou don't have the required materials.");
 		return false;
 	}
+	/* Free consumed slots before checking output capacity, so a full inventory
+	   can still craft a recipe that replaces its ingredients with an output. */
+	if (Survival_InventoryRemove(inputA, amountA) != amountA) return false;
+	if (amountB > 0 && Survival_InventoryRemove(inputB, amountB) != amountB) {
+		Survival_InventoryAdd(inputA, amountA);
+		return false;
+	}
 	added = Survival_InventoryAdd(output, amountOut);
 	if (added != amountOut) {
 		if (added > 0) Survival_InventoryRemove(output, added);
+		Survival_InventoryAdd(inputA, amountA);
+		if (amountB > 0) Survival_InventoryAdd(inputB, amountB);
 		Chat_AddRaw("&eYour inventory is full.");
 		return false;
 	}
-	Survival_InventoryRemove(inputA, amountA);
-	if (amountB > 0) Survival_InventoryRemove(inputB, amountB);
 	Chat_AddRaw("&aCrafted successfully.");
 	return true;
 }
@@ -1089,7 +1098,7 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 		dz = player->Base.Position.z - e->Position.z;
 		distance = Math_SqrtF(dx * dx + dz * dz);
 		if (distance < 1.35f) {
-			if (mob->attackTimer <= 0.0f && player->Base.OnGround && !Survival_IsDead()) {
+			if (mob->attackTimer <= 0.0f && !Survival_IsDead()) {
 				Survival_Damage(mob->type == SURVIVAL_MOB_CREEPER ? 4 : 2);
 				mob->attackTimer = 1.25f;
 			}
@@ -1137,7 +1146,6 @@ static cc_bool Survival_IsNight(void) {
 
 static void Survival_SpawnInitialAnimals(void) {
 	Vec3 centre;
-	int i;
 	if (!Entities.CurPlayer) return;
 	centre = Entities.CurPlayer->Base.Position;
 	SurvivalMob_Spawn(SURVIVAL_MOB_PIG, centre.x + 3.0f, centre.z + 2.0f);
@@ -1145,7 +1153,6 @@ static void Survival_SpawnInitialAnimals(void) {
 	SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, centre.x + 5.0f, centre.z - 3.0f);
 	SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, centre.x - 5.0f, centre.z + 3.0f);
 	SurvivalMob_Spawn(SURVIVAL_MOB_SHEEP, centre.x + 2.0f, centre.z - 5.0f);
-	for (i = 0; i < 5; i++) { /* keep the initial population modest */ }
 }
 
 static void Survival_SpawnNightMob(void) {
@@ -1262,7 +1269,9 @@ static void Survival_Init(void) {
 	Random_SeedFromCurrentTime(&survivalRng);
 	Survival_Reset();
 	Commands_Register(&SurvivalCraftCommand);
-	Chat_AddRaw("&aSurvival mode enabled. Use /craft help for recipes.");
+	if (Server.IsSinglePlayer && !Game_ClassicMode) {
+		Chat_AddRaw("&aSurvival mode enabled. Use /craft help for recipes.");
+	}
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	Game.Draw2DHooks[1] = Survival_RenderHUD;
