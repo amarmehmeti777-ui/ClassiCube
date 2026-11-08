@@ -499,11 +499,13 @@ void InputHandler_Tick(float delta) {
 	if (left) {
 		InputHandler_DeleteBlock(0.25f);
 	} else if (right) {
+		Survival_CancelMining();
 		InputHandler_PlaceBlock();
+	} else if (middle) {
+		Survival_CancelMining();
+		InputHandler_PickBlock();
 	} else {
 		Survival_CancelMining();
-	} else if (middle) {
-		InputHandler_PickBlock();
 	}
 }
 
