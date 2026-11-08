@@ -809,6 +809,8 @@ cc_result Survival_Load(const cc_string* mapPath) {
 			Mem_Copy(&position.y, &by, sizeof(by));
 			Mem_Copy(&position.z, &bz, sizeof(bz));
 			if (block == BLOCK_AIR || block >= BLOCK_COUNT || amount == 0 || amount > SURVIVAL_INVENTORY_STACK_SIZE) continue;
+			/* Reject NaN and out-of-world positions from damaged sidecar files. */
+			if (position.x != position.x || position.y != position.y || position.z != position.z) continue;
 			if (position.x < 0.0f || position.x >= World.Width || position.y < 0.0f ||
 				position.y >= World.Height || position.z < 0.0f || position.z >= World.Length) continue;
 			SurvivalItem_Spawn((BlockID)block, amount, position);
