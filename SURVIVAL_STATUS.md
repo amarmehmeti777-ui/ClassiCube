@@ -1,33 +1,58 @@
-# Survival Mode fork — implementation status
+# ClassiCube Survival fork — current implementation
 
-This repository is a separate ClassiCube fork intended to grow into a lightweight, singleplayer Minecraft Beta 1.7.3-style Survival Edition.
+This branch adds a lightweight, local singleplayer Survival layer to ClassiCube. Survival is active in normal (non-Classic) singleplayer worlds only. Multiplayer and Classic mode keep their original behavior.
 
-## Current milestone: survival player-state foundation
+## Implemented in this branch
 
-- 10 hearts (20 health points) and a health HUD meter.
-- 10 food points (20 food points) and a hunger HUD meter.
-- A 15-second underwater air reserve, air HUD meter, and drowning damage.
-- Fall-distance damage after falls longer than three blocks.
-- Lava-contact damage.
-- Exhaustion from walking and jumping, food/saturation depletion, natural regeneration, and starvation.
-- A delayed death/respawn flow using the existing local-player spawn system.
-- Public APIs for future food, healing, and damage sources.
+### Player survival
+- 20 health points, 20 hunger points and saturation/exhaustion.
+- Health, hunger and air meters in the HUD.
+- Underwater air reserve and drowning damage.
+- Fall damage, with water cancelling fall damage.
+- Lava damage.
+- Walking and jumping exhaustion, hunger depletion, regeneration while well-fed, and starvation.
+- Death delay and respawn at the world spawn.
 
-Survival is active only in the internal singleplayer connection. Existing Classic multiplayer does not receive local health, hunger, or damage behavior.
+### Inventory and blocks
+- Stack counts for inventory items; normal items stack to 64 and tools stack to 1.
+- Survival inventory is integrated with ClassiCube's existing inventory picker and hotbar.
+- Hotbar displays item counts.
+- Food can be eaten from the selected hotbar slot.
+- Holding the break input builds mining progress; releasing it or changing targets cancels progress.
+- Basic block harvest rules and drops for common blocks and ores.
+- Block placement consumes one item from the inventory.
+- Virtual items include food, sticks, coal, ingots, crafting table, furnace, torches, wooden/stone/iron tools and swords, plus mob drops.
+- Wooden, stone and iron tools and swords have durability.
 
-## Not yet complete
+### Crafting and smelting
+- Crafting uses the /craft chat command and checks for a nearby crafting table/furnace when required.
+- Recipes include planks, sticks, crafting table, furnace, torches, wooden/stone/iron tools, swords, iron/gold ingots, and cooked meat.
+- Smelting/cooking commands consume one coal immediately; there is not yet a timed furnace interface.
 
-1. Stackable item inventory, item entities, pickup and drop.
-2. Survival mining progress, tool requirements, block drops, and tool durability.
-3. Crafting grid, recipes, crafting table, furnace, smelting, and fuel.
-4. Survival-specific Beta-style world generation, including ores, caves, trees, water and lava distribution.
-5. Hostile and passive mob AI, spawning, combat, drops, and animal breeding.
-6. Armor, equipment, damage mitigation, and remaining player damage sources.
-7. Persistent singleplayer world/player saves and save migration.
-8. Survival menus, difficulty settings, and full HUD artwork.
+### World and mobs
+- A 20-minute day/night cycle adjusts sky, fog and sunlight colours.
+- Passive pigs, chickens and sheep spawn when a world loads and wander around.
+- Zombies, skeletons, creepers and spiders can spawn at night, pursue the player, and attack at close range.
+- Passive mobs drop meat or wool; hostile mobs drop rotten flesh, bones, arrows, gunpowder or string.
+- The existing ClassiCube singleplayer Notchy generator is used with a 128-block vertical world on normal builds.
 
-The current milestone is isolated in src/Survival.c and src/Survival.h so later systems can call its APIs without mixing survival logic into the Classic network protocol.
+### Saving
+- Survival health, hunger, air, inventory stacks, tool durability, hotbar layout and day/night time are stored in a companion .survival file beside the map.
+- The save sidecar is versioned and has readers for the earlier sidecar versions.
+- The map's own ClassiCube save format is unchanged.
 
-## Build / test note
+## Current limitations — not yet a complete Beta 1.7.3 recreation
 
-The build gathers all C files in src automatically. This change has not yet been compiled or play-tested in this environment. Run the Windows build and test singleplayer before treating the milestone as release-ready.
+- Worlds are finite ClassiCube maps (normally 128 × 128 horizontally and 128 blocks high), not infinite Beta terrain.
+- The Notchy generator is ClassiCube's existing generator, not a faithful Beta 1.7.3 biome/terrain generator.
+- Mined block and mob drops are added directly to the inventory; there are no dropped-item entities or pickup physics. Drops can be lost if the inventory is full.
+- Crafting is command-based rather than a Minecraft crafting-grid screen.
+- Furnace recipes are instant commands rather than a burning fuel slot, progress bar and output-slot furnace.
+- Mobs use lightweight basic wandering/chasing and proximity attacks. There is no cow, breeding, projectile combat, creeper explosion, armor, shields, enchantments, or full loot tables yet.
+- Death currently respawns the player without a Minecraft-style world item-drop/death chest system.
+- HUD meters are simple drawn bars, not the original heart, drumstick and bubble icons.
+- This code has not yet been successfully compiled or play-tested in this environment. It must pass the 32-bit Windows build and in-game tests before being called a finished playable release.
+
+## Build status
+
+The branch has a Windows GitHub Actions workflow trigger configured, but GitHub currently reports no workflow runs for this branch. There is no verified Windows executable yet.
