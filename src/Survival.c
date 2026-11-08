@@ -1,6 +1,7 @@
 #include "Survival.h"
 #include "BlockID.h"
 #include "Block.h"
+#include "Commands.h"
 #include "Chat.h"
 #include "Entity.h"
 #include "ExtMath.h"
@@ -273,6 +274,8 @@ static void Survival_OnNewMap(void) {
 	int i;
 	if (!Server.IsSinglePlayer) return;
 	Survival_Reset();
+	Commands_Register(&SurvivalCraftCommand);
+	Chat_AddRaw("&aSurvival mode enabled. Use /craft help for recipes.");
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
@@ -685,6 +688,108 @@ void Survival_OnPlayerPhysics(struct LocalPlayer* player) {
 	}
 }
 
+
+static cc_bool Survival_NearBlock(BlockID block) {
+	Vec3 pos;
+	int x, y, z, dx, dy, dz;
+	if (!Entities.CurPlayer) return false;
+	pos = Entities.CurPlayer->Base.Position;
+	x = Math_Floor(pos.x); y = Math_Floor(pos.y); z = Math_Floor(pos.z);
+	for (dy = -1; dy <= 1; dy++) {
+		for (dz = -3; dz <= 3; dz++) {
+			for (dx = -3; dx <= 3; dx++) {
+				if (World_SafeGetBlock(x + dx, y + dy, z + dz) == block) return true;
+			}
+		}
+	}
+	return false;
+}
+
+static cc_bool Survival_CraftRecipe(BlockID inputA, int amountA, BlockID inputB, int amountB,
+	BlockID output, int amountOut, BlockID station) {
+	int added;
+	if (station != BLOCK_AIR && !Survival_NearBlock(station)) {
+		Chat_AddRaw("&eYou need the correct crafting station nearby.");
+		return false;
+	}
+	if (Survival_GetItemCount(inputA) < amountA ||
+		(amountB > 0 && Survival_GetItemCount(inputB) < amountB)) {
+		Chat_AddRaw("&eYou don't have the required materials.");
+		return false;
+	}
+	added = Survival_InventoryAdd(output, amountOut);
+	if (added != amountOut) {
+		if (added > 0) Survival_InventoryRemove(output, added);
+		Chat_AddRaw("&eYour inventory is full.");
+		return false;
+	}
+	Survival_InventoryRemove(inputA, amountA);
+	if (amountB > 0) Survival_InventoryRemove(inputB, amountB);
+	Chat_AddRaw("&aCrafted successfully.");
+	return true;
+}
+
+static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
+	const cc_string* recipe;
+	if (!Server.IsSinglePlayer || Game_ClassicMode) return;
+	if (!argsCount || String_CaselessEqualsConst(&args[0], "help")) {
+		Chat_AddRaw("&a/craft planks &7- 1 log to 4 planks");
+		Chat_AddRaw("&a/craft sticks &7- 2 planks to 4 sticks");
+		Chat_AddRaw("&a/craft table &7- 4 planks to a crafting table");
+		Chat_AddRaw("&a/craft furnace &7- 8 cobblestone to a furnace");
+		Chat_AddRaw("&a/craft torch &7- 1 coal + 1 stick to 4 torches");
+		Chat_AddRaw("&a/craft wooden_pickaxe|stone_pickaxe|wooden_axe|stone_axe");
+		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel");
+		Chat_AddRaw("&a/craft smelt_iron|smelt_gold|cook_pork|cook_beef|cook_chicken");
+		return;
+	}
+	recipe = &args[0];
+	if (String_CaselessEqualsConst(recipe, "planks")) {
+		Survival_CraftRecipe(BLOCK_LOG, 1, BLOCK_AIR, 0, BLOCK_WOOD, 4, BLOCK_AIR);
+	} else if (String_CaselessEqualsConst(recipe, "sticks")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 2, BLOCK_AIR, 0, BLOCK_ITEM_STICK, 4, BLOCK_AIR);
+	} else if (String_CaselessEqualsConst(recipe, "table")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 4, BLOCK_AIR, 0, BLOCK_ITEM_CRAFTING_TABLE, 1, BLOCK_AIR);
+	} else if (String_CaselessEqualsConst(recipe, "furnace")) {
+		Survival_CraftRecipe(BLOCK_COBBLE, 8, BLOCK_AIR, 0, BLOCK_ITEM_FURNACE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "torch")) {
+		Survival_CraftRecipe(BLOCK_ITEM_COAL, 1, BLOCK_ITEM_STICK, 1, BLOCK_ITEM_TORCH, 4, BLOCK_AIR);
+	} else if (String_CaselessEqualsConst(recipe, "wooden_pickaxe")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_WOOD_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "stone_pickaxe")) {
+		Survival_CraftRecipe(BLOCK_COBBLE, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "wooden_axe")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_WOOD_AXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "stone_axe")) {
+		Survival_CraftRecipe(BLOCK_COBBLE, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_AXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "wooden_shovel")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_WOOD_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "stone_shovel")) {
+		Survival_CraftRecipe(BLOCK_COBBLE, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "smelt_iron")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_ORE, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_IRON_INGOT, 1, BLOCK_ITEM_FURNACE);
+	} else if (String_CaselessEqualsConst(recipe, "smelt_gold")) {
+		Survival_CraftRecipe(BLOCK_ITEM_GOLD_ORE, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_GOLD_INGOT, 1, BLOCK_ITEM_FURNACE);
+	} else if (String_CaselessEqualsConst(recipe, "cook_pork")) {
+		Survival_CraftRecipe(BLOCK_ITEM_RAW_PORK, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_PORK, 1, BLOCK_ITEM_FURNACE);
+	} else if (String_CaselessEqualsConst(recipe, "cook_beef")) {
+		Survival_CraftRecipe(BLOCK_ITEM_RAW_BEEF, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_BEEF, 1, BLOCK_ITEM_FURNACE);
+	} else if (String_CaselessEqualsConst(recipe, "cook_chicken")) {
+		Survival_CraftRecipe(BLOCK_ITEM_RAW_CHICKEN, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_CHICKEN, 1, BLOCK_ITEM_FURNACE);
+	} else {
+		Chat_AddRaw("&eUnknown recipe. Use /craft help.");
+	}
+}
+
+static struct ChatCommand SurvivalCraftCommand = {
+	"craft", SurvivalCraftCommand_Execute,
+	COMMAND_FLAG_SINGLEPLAYER_ONLY,
+	{
+		"&a/craft [recipe]",
+		"&eCraft Survival materials, blocks, food and tools.",
+	}
+};
+
 static void Survival_DrawMeter(int x, int y, int value, PackedCol fill) {
 	int i, amount;
 	PackedCol empty = PackedCol_Make(45, 45, 45, 230);
@@ -742,6 +847,7 @@ static void Survival_Init(void) {
 }
 
 static void Survival_Free(void) {
+	Commands_Unregister(&SurvivalCraftCommand);
 	if (Game.Draw2DHooks[1] == Survival_RenderHUD) Game.Draw2DHooks[1] = NULL;
 }
 
