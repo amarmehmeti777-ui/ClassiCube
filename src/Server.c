@@ -139,7 +139,8 @@ static void SPConnection_BeginConnect(void) {
 	verSize = 64;
 #else
 	horSize = Game_ClassicMode ? 256 : 128;
-	verSize = 64;
+	/* Beta-era worlds are 128 blocks tall; keep low-memory targets at 64. */
+	verSize = 128;
 #endif
 
 #if defined CC_BUILD_N64 || defined CC_BUILD_NDS || defined CC_BUILD_PS1 || defined CC_BUILD_SATURN || defined CC_BUILD_TINYMEM
