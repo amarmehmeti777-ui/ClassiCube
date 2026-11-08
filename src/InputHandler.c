@@ -408,6 +408,10 @@ static void InputHandler_DeleteBlock(float elapsed) {
 	BlockID old;
 	/* always play delete animations, even if we aren't deleting a block */
 	HeldBlockRenderer_ClickAnim(true);
+	if (Survival_AttackMob()) {
+		Survival_CancelMining();
+		return;
+	}
 
 	pos = Game_SelectedPos.pos;
 	if (!Game_SelectedPos.valid || !World_Contains(pos.x, pos.y, pos.z)) {

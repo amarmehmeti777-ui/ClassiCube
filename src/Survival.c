@@ -339,6 +339,11 @@ void Survival_OnBlockBroken(BlockID block) {
 	if (drop != BLOCK_AIR) Survival_InventoryAdd(drop, 1);
 }
 
+static void SurvivalMob_ClearAll(void);
+static cc_bool Survival_IsNight(void);
+static int SurvivalMob_Count(cc_bool hostileOnly);
+static void Survival_SpawnNightMob(void);
+
 static void Survival_OnNewMap(void) {
 	int i;
 	if (!Server.IsSinglePlayer) return;
@@ -908,7 +913,7 @@ struct SurvivalMob {
 };
 
 static struct SurvivalMob survivalMobs[SURVIVAL_MOB_SLOTS];
-static cc_bool SurvivalMob_Tick(struct Entity* e, float delta);
+static void SurvivalMob_Tick(struct Entity* e, float delta);
 static float hostileSpawnTimer;
 
 static cc_bool SurvivalMob_IsHostile(const struct SurvivalMob* mob) {
@@ -1061,7 +1066,7 @@ static void SurvivalMob_SetWanderTarget(struct SurvivalMob* mob) {
 	mob->retargetTimer = 2.0f + (float)Random_Next(&survivalRng, 400) / 100.0f;
 }
 
-static cc_bool SurvivalMob_Tick(struct Entity* e, float delta) {
+static void SurvivalMob_Tick(struct Entity* e, float delta) {
 	struct SurvivalMob* mob = (struct SurvivalMob*)e;
 	struct LocalPlayer* player = Entities.CurPlayer;
 	Vec3 oldPos = e->Position;
@@ -1070,7 +1075,7 @@ static cc_bool SurvivalMob_Tick(struct Entity* e, float delta) {
 	float dx, dz, distance, speed;
 	cc_bool hostile = SurvivalMob_IsHostile(mob);
 
-	if (!mob->active || !Survival_IsActive() || !World.Loaded || !player) return true;
+	if (!mob->active || !Survival_IsActive() || !World.Loaded || !player) return;
 	mob->retargetTimer -= delta;
 	mob->attackTimer -= delta;
 	mob->hurtTimer -= delta;
