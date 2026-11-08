@@ -1339,7 +1339,7 @@ static void Survival_ComponentReset(void) {
 }
 
 static void Survival_Init(void) {
-	Random_SeedFromCurrentTime(&survivalRng);
+	Random_Seed(&survivalRng, (int)Stopwatch_Measure());
 	Survival_Reset();
 	Commands_Register(&SurvivalCraftCommand);
 	timeOfDay = 0.0f;
