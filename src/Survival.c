@@ -1187,6 +1187,9 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		if (spawnValues[0] == spawnValues[0] && spawnValues[1] == spawnValues[1] &&
 			spawnValues[2] == spawnValues[2] && spawnValues[3] == spawnValues[3] &&
 			spawnValues[4] == spawnValues[4] &&
+			spawnValues[0] >= 0.0f && spawnValues[0] < World.Width &&
+			spawnValues[1] >= 0.0f && spawnValues[1] < World.Height &&
+			spawnValues[2] >= 0.0f && spawnValues[2] < World.Length &&
 			World_Contains(Math_Floor(spawnValues[0]), Math_Floor(spawnValues[1]), Math_Floor(spawnValues[2]))) {
 			Entities.CurPlayer->Spawn.x = spawnValues[0];
 			Entities.CurPlayer->Spawn.y = spawnValues[1];
