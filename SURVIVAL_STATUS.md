@@ -50,6 +50,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - Zombies, skeletons, creepers and spiders can spawn at night and pursue the player. Zombies, skeletons and spiders attack at close range. Creepers pause and hiss with a 1.5-second fuse, then damage nearby players and break nearby non-bedrock blocks.
 - Zombies and skeletons burn in direct daylight and are safe under a roof.
 - Shears can be crafted from two iron ingots and used on nearby sheep to collect wool. Sheared sheep regrow wool after grazing grass; grass turns to dirt as they graze. Shears have durability.
+- Chickens lay collectible eggs every five to ten minutes and drop feathers as well as raw chicken.
 - Passive mobs drop meat or wool; hostile mobs drop rotten flesh, bones, arrows, gunpowder or string.
 
 ### Saving
