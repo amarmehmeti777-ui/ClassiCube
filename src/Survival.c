@@ -328,11 +328,13 @@ struct SurvivalItem {
 	int count;
 	int durability;
 	float age, pickupDelay;
+	cc_bool projectile;
 	cc_bool active;
 };
 
 static struct SurvivalItem survivalItems[SURVIVAL_ITEM_SLOTS];
 static void SurvivalItem_ClearAll(void);
+static void SurvivalItem_EggImpact(struct SurvivalItem* item);
 
 static struct SurvivalItem* SurvivalItem_FindFree(void) {
 	int i;
@@ -400,7 +402,9 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 	if (!item->active || !Survival_IsActive() || !World.Loaded) return;
 	item->age += delta;
 	item->pickupDelay -= delta;
-	if (item->age >= 300.0f || e->Position.y < -5.0f || Entity_TouchesAnyLava(e)) {
+	if ((item->projectile && item->age >= 8.0f) ||
+		(!item->projectile && item->age >= 300.0f) ||
+		e->Position.y < -5.0f || Entity_TouchesAnyLava(e)) {
 		Entities_Remove(item->entityID);
 		return;
 	}
@@ -412,6 +416,13 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 	e->Yaw = Math_ClampAngle(e->Yaw + delta * 90.0f);
 	e->Anim.BobbingModel = Math_SinF((float)Game.Time + item->entityID) * 0.045f;
 
+	if (item->projectile) {
+		if (e->OnGround || item->Collisions.HitXMin || item->Collisions.HitXMax ||
+			item->Collisions.HitZMin || item->Collisions.HitZMax) {
+			SurvivalItem_EggImpact(item);
+		}
+		return;
+	}
 	if (!player || Survival_IsDead() || item->pickupDelay > 0.0f) return;
 	dx = player->Base.Position.x - e->Position.x;
 	dy = player->Base.Position.y - e->Position.y;
@@ -505,6 +516,69 @@ static void SurvivalItem_SpawnEx(BlockID block, int amount, Vec3 position, int d
 
 static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 	SurvivalItem_SpawnEx(block, amount, position, 0);
+}
+
+static cc_bool Survival_ThrowEgg(void) {
+	static const cc_string blockModel = String_FromConst("block");
+	struct LocalPlayer* player = Entities.CurPlayer;
+	struct SurvivalItem* item;
+	Vec3 eye;
+	float yaw, pitch, directionX, directionY, directionZ;
+	int id;
+
+	if (!player) return false;
+	if (Survival_GetItemCount(BLOCK_ITEM_EGG) <= 0) return true;
+	item = SurvivalItem_FindFree();
+	if (!item) {
+		Chat_AddRaw("&eThere is no room for another thrown item.");
+		return true;
+	}
+	id = SurvivalItem_FindID(item);
+	if (id < 0 || Survival_InventoryRemove(BLOCK_ITEM_EGG, 1) != 1) return true;
+
+	Mem_Set(item, 0, sizeof(*item));
+	item->entityID = id;
+	item->block = BLOCK_ITEM_EGG;
+	item->count = 1;
+	item->projectile = true;
+	item->active = true;
+
+	Entity_Init(&item->Base);
+	Entity_SetModel(&item->Base, &blockModel);
+	item->Base.ModelBlock = BLOCK_ITEM_EGG;
+	Vec3_Set(item->Base.ModelScale, 0.25f, 0.25f, 0.25f);
+	Entity_UpdateModelBounds(&item->Base);
+	item->Base.VTABLE = &survivalItem_VTABLE;
+	AnimatedComp_Init(&item->Base.Anim);
+
+	HacksComp_Init(&item->Hacks);
+	item->Hacks.CanBePushed = false;
+	item->Hacks.Floating = false;
+	PhysicsComp_Init(&item->Physics, &item->Base);
+	item->Physics.Hacks = &item->Hacks;
+	item->Physics.Collisions = &item->Collisions;
+	item->Collisions.Entity = &item->Base;
+	item->Collisions.StepSize = 0.1f;
+
+	yaw = player->Base.Yaw * MATH_DEG2RAD;
+	pitch = player->Base.Pitch * MATH_DEG2RAD;
+	directionX = -Math_SinF(yaw) * Math_CosF(pitch);
+	directionY = -Math_SinF(pitch);
+	directionZ = Math_CosF(yaw) * Math_CosF(pitch);
+	eye = Entity_GetEyePosition(&player->Base);
+	item->Base.Position.x = eye.x + directionX * 0.5f;
+	item->Base.Position.y = eye.y + directionY * 0.5f;
+	item->Base.Position.z = eye.z + directionZ * 0.5f;
+	item->Base.prev.pos = item->Base.Position;
+	item->Base.next.pos = item->Base.Position;
+	item->Base.Yaw = player->Base.Yaw;
+	item->Base.Pitch = player->Base.Pitch;
+	item->Base.Velocity.x = directionX * 0.9f;
+	item->Base.Velocity.y = directionY * 0.9f + 0.12f;
+	item->Base.Velocity.z = directionZ * 0.9f;
+	Entities.List[id] = &item->Base;
+	Chat_AddRaw("&aYou threw an egg.");
+	return true;
 }
 
 static void SurvivalItem_ClearAll(void) {
@@ -732,6 +806,7 @@ cc_bool Survival_UseItem(BlockID block) {
 	float sat = 0.0f;
 	if (!Survival_IsActive()) return false;
 	if (Survival_IsArmor(block)) return Survival_EquipArmor(block);
+	if (block == BLOCK_ITEM_EGG) return Survival_ThrowEgg();
 	if (block == BLOCK_ITEM_SHEARS) return Survival_ShearNearestSheep();
 	if (block == BLOCK_ITEM_SEEDS) return Survival_PlantSeeds();
 	if (block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE) return Survival_UseHoe(block);
@@ -1004,13 +1079,13 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	}
 
 	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
-		if (survivalItems[i].active && survivalItems[i].count > 0) droppedCount++;
+		if (survivalItems[i].active && !survivalItems[i].projectile && survivalItems[i].count > 0) droppedCount++;
 	}
 	data[offset++] = (cc_uint8)droppedCount;
 	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
 		struct SurvivalItem* item = &survivalItems[i];
 		cc_uint32 bits;
-		if (!item->active || item->count <= 0) continue;
+		if (!item->active || item->projectile || item->count <= 0) continue;
 		data[offset++] = (cc_uint8)(item->block & 0xFF);
 		data[offset++] = (cc_uint8)(item->block >> 8);
 		data[offset++] = (cc_uint8)(item->count & 0xFF);
@@ -2061,6 +2136,15 @@ static struct SurvivalMob* SurvivalMob_Spawn(int type, float x, float z) {
 	mob->retargetTimer = 0.1f;
 	Entities.List[id] = &mob->Base;
 	return mob;
+}
+
+static void SurvivalItem_EggImpact(struct SurvivalItem* item) {
+	if (!item || !item->active) return;
+	if (Random_Next(&survivalRng, 8) == 0) {
+		SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, item->Base.Position.x, item->Base.Position.z);
+		Chat_AddRaw("&aA chicken hatched from the egg!");
+	}
+	Entities_Remove(item->entityID);
 }
 
 static void SurvivalMob_ClearAll(void) {
