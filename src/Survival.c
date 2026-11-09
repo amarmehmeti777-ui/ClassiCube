@@ -618,6 +618,15 @@ static void Survival_CropTick(float delta) {
 	}
 }
 
+static struct SurvivalCrop* Survival_CropFind(int x, int y, int z) {
+	int i;
+	for (i = 0; i < SURVIVAL_CROP_SLOTS; i++) {
+		struct SurvivalCrop* crop = &survivalCrops[i];
+		if (crop->active && crop->x == x && crop->y == y && crop->z == z) return crop;
+	}
+	return NULL;
+}
+
 static void Survival_CropRebuild(void) {
 	int x, y, z;
 	Mem_Set(survivalCrops, 0, sizeof(survivalCrops));
@@ -942,7 +951,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 47];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 47 + 2 + SURVIVAL_CROP_SLOTS * 15];
 	cc_uint16 dayTicks;
 	int i, itemTypes = 0, droppedCount = 0, offset = 14;
 	cc_result res;
@@ -954,7 +963,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 8;
+	data[4] = 9;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -1048,6 +1057,29 @@ cc_result Survival_Save(const cc_string* mapPath) {
 			data[offset++] = (cc_uint8)(bits >> 24);
 		}
 	}
+	{
+		int cropCount = 0;
+		for (i = 0; i < SURVIVAL_CROP_SLOTS; i++) {
+			if (survivalCrops[i].active) cropCount++;
+		}
+		data[offset++] = (cc_uint8)(cropCount & 0xFF);
+		data[offset++] = (cc_uint8)(cropCount >> 8);
+		for (i = 0; i < SURVIVAL_CROP_SLOTS; i++) {
+			struct SurvivalCrop* crop = &survivalCrops[i];
+			cc_uint32 bits;
+			if (!crop->active) continue;
+			data[offset++] = (cc_uint8)(crop->x & 0xFF); data[offset++] = (cc_uint8)(crop->x >> 8);
+			data[offset++] = (cc_uint8)(crop->y & 0xFF); data[offset++] = (cc_uint8)(crop->y >> 8);
+			data[offset++] = (cc_uint8)(crop->z & 0xFF); data[offset++] = (cc_uint8)(crop->z >> 8);
+			Mem_Copy(&bits, &crop->growthTimer, sizeof(bits));
+			data[offset++] = (cc_uint8)bits; data[offset++] = (cc_uint8)(bits >> 8);
+			data[offset++] = (cc_uint8)(bits >> 16); data[offset++] = (cc_uint8)(bits >> 24);
+			Mem_Copy(&bits, &crop->hydrationTimer, sizeof(bits));
+			data[offset++] = (cc_uint8)bits; data[offset++] = (cc_uint8)(bits >> 8);
+			data[offset++] = (cc_uint8)(bits >> 16); data[offset++] = (cc_uint8)(bits >> 24);
+			data[offset++] = crop->hydrated ? 1 : 0;
+		}
+	}
 
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_CreatePath(&stream, &rawPath);
@@ -1065,8 +1097,9 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 47];
-	cc_uint32 payloadSize, droppedOffset, furnaceOffset, armorOffset, spawnOffset;
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 47 + 2 + SURVIVAL_CROP_SLOTS * 15];
+	cc_uint32 payloadSize, droppedOffset, furnaceOffset, armorOffset, spawnOffset, cropOffset;
+	cc_uint16 savedCropCount = 0;
 	int i, offset, stackSlots = 0, droppedCount = 0;
 	cc_result res;
 
@@ -1084,7 +1117,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6 && data[4] != 7 && data[4] != 8) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6 && data[4] != 7 && data[4] != 8 && data[4] != 9) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
@@ -1139,6 +1172,26 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		if (res) {
 			stream.Close(&stream);
 			return res;
+		}
+	}
+	cropOffset = spawnOffset + (data[4] >= 8 ? 20U : 0U);
+	if (data[4] >= 9) {
+		res = Stream_Read(&stream, data + cropOffset, 2);
+		if (res) {
+			stream.Close(&stream);
+			return res;
+		}
+		savedCropCount = (cc_uint16)(data[cropOffset] | ((cc_uint16)data[cropOffset + 1] << 8));
+		if (savedCropCount > SURVIVAL_CROP_SLOTS) {
+			stream.Close(&stream);
+			return ERR_INVALID_ARGUMENT;
+		}
+		if (savedCropCount > 0) {
+			res = Stream_Read(&stream, data + cropOffset + 2, (cc_uint32)savedCropCount * 15U);
+			if (res) {
+				stream.Close(&stream);
+				return res;
+			}
 		}
 	}
 	res = stream.Close(&stream);
@@ -1215,6 +1268,40 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	fallActive = hasLastPosition = jumpWasRising = false;
 	fallDistance = fallLastY = lastX = lastZ = 0.0f;
 	Survival_CancelMining();
+
+	if (data[4] >= 9) {
+		offset = (int)cropOffset + 2;
+		for (i = 0; i < savedCropCount; i++) {
+			int x = (int)((cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8)));
+			int y = (int)((cc_uint16)(data[offset + 2] | ((cc_uint16)data[offset + 3] << 8)));
+			int z = (int)((cc_uint16)(data[offset + 4] | ((cc_uint16)data[offset + 5] << 8)));
+			cc_uint32 bits;
+			float growth, hydration;
+			struct SurvivalCrop* crop;
+			offset += 6;
+			bits = (cc_uint32)data[offset] | ((cc_uint32)data[offset + 1] << 8) |
+				((cc_uint32)data[offset + 2] << 16) | ((cc_uint32)data[offset + 3] << 24);
+			offset += 4;
+			Mem_Copy(&growth, &bits, sizeof(bits));
+			bits = (cc_uint32)data[offset] | ((cc_uint32)data[offset + 1] << 8) |
+				((cc_uint32)data[offset + 2] << 16) | ((cc_uint32)data[offset + 3] << 24);
+			offset += 4;
+			Mem_Copy(&hydration, &bits, sizeof(bits));
+			{
+				cc_bool hydrated = data[offset++] != 0;
+				if (!World_Contains(x, y, z) || !Survival_IsCrop(World_SafeGetBlock(x, y, z)) ||
+					World_SafeGetBlock(x, y - 1, z) != BLOCK_ITEM_FARMLAND ||
+					growth != growth || hydration != hydration ||
+					growth < 0.0f || growth >= SURVIVAL_CROP_GROW_TIME ||
+					hydration < 0.0f || hydration > 15.0f) continue;
+				crop = Survival_CropFind(x, y, z);
+				if (!crop) continue;
+				crop->growthTimer = growth;
+				crop->hydrationTimer = hydration;
+				crop->hydrated = hydrated;
+			}
+		}
+	}
 
 	offset = 12;
 	if (data[4] >= 2) {
