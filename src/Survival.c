@@ -1767,6 +1767,8 @@ struct SurvivalMob {
 	float attackTimer;
 	float hurtTimer;
 	float burnTimer;
+	float fuseTimer;
+	cc_bool exploded;
 	cc_bool active;
 };
 
@@ -1924,7 +1926,7 @@ static void SurvivalMob_Die(struct SurvivalMob* mob) {
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_ARROW, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_CREEPER:
-		SurvivalMob_AddDrop(mob, BLOCK_ITEM_GUNPOWDER, 1 + Random_Next(&survivalRng, 2));
+		if (!mob->exploded) SurvivalMob_AddDrop(mob, BLOCK_ITEM_GUNPOWDER, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SPIDER:
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_STRING, 1 + Random_Next(&survivalRng, 2));
@@ -1958,6 +1960,54 @@ static cc_bool SurvivalMob_ExposedToSky(struct Entity* e) {
 		if (Blocks.BlocksLight[block]) return false;
 	}
 	return true;
+}
+
+static void SurvivalMob_Explode(struct SurvivalMob* mob) {
+	struct LocalPlayer* player = Entities.CurPlayer;
+	IVec3 pos;
+	int x, y, z, bx, by, bz;
+	float dx, dy, dz, distanceSq;
+
+	if (!mob || !mob->active || mob->exploded) return;
+	mob->exploded = true;
+
+	if (player) {
+		dx = player->Base.Position.x - mob->Base.Position.x;
+		dy = player->Base.Position.y - mob->Base.Position.y;
+		dz = player->Base.Position.z - mob->Base.Position.z;
+		distanceSq = dx * dx + dy * dy + dz * dz;
+		if (distanceSq <= 3.8f * 3.8f) {
+			float distance = Math_SqrtF(distanceSq);
+			int damage = distance < 1.5f ? 8 : (distance < 2.7f ? 5 : 2);
+			Survival_DamageWithArmor(damage);
+		}
+	}
+
+	bx = Math_Floor(mob->Base.Position.x);
+	by = Math_Floor(mob->Base.Position.y + 0.5f);
+	bz = Math_Floor(mob->Base.Position.z);
+	for (y = by - 2; y <= by + 2; y++) {
+		for (z = bz - 2; z <= bz + 2; z++) {
+			for (x = bx - 2; x <= bx + 2; x++) {
+				BlockID block;
+				dx = (float)x + 0.5f - mob->Base.Position.x;
+				dy = (float)y + 0.5f - (mob->Base.Position.y + 0.5f);
+				dz = (float)z + 0.5f - mob->Base.Position.z;
+				if (dx * dx + dy * dy + dz * dz > 2.6f * 2.6f ||
+					!World_Contains(x, y, z)) continue;
+				block = World_GetBlock(x, y, z);
+				if (block == BLOCK_AIR || block == BLOCK_BEDROCK ||
+					block == BLOCK_WATER || block == BLOCK_STILL_WATER ||
+					block == BLOCK_LAVA || block == BLOCK_STILL_LAVA) continue;
+				pos.x = x; pos.y = y; pos.z = z;
+				Game_ChangeBlock(x, y, z, BLOCK_AIR);
+				Event_RaiseBlock(&UserEvents.BlockChanged, pos, block, BLOCK_AIR);
+			}
+		}
+	}
+
+	Chat_AddRaw("&eA creeper exploded!");
+	SurvivalMob_Die(mob);
 }
 
 static void SurvivalMob_Tick(struct Entity* e, float delta) {
@@ -1994,22 +2044,33 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 		dx = player->Base.Position.x - e->Position.x;
 		dz = player->Base.Position.z - e->Position.z;
 		distance = Math_SqrtF(dx * dx + dz * dz);
-		if (distance < 1.35f) {
-			if (mob->attackTimer <= 0.0f && !Survival_IsDead()) {
-				Survival_DamageWithArmor(mob->type == SURVIVAL_MOB_CREEPER ? 4 : 2);
-				mob->attackTimer = 1.25f;
-			}
+		if (mob->type == SURVIVAL_MOB_CREEPER && distance < 3.0f) {
+			if (mob->fuseTimer <= 0.0f) mob->fuseTimer = 1.5f;
+			mob->fuseTimer -= delta;
 			dx = dz = 0.0f;
-		} else if (distance < 20.0f && distance > 0.001f) {
-			dx /= distance;
-			dz /= distance;
+			if (mob->fuseTimer <= 0.0f) {
+				SurvivalMob_Explode(mob);
+				return;
+			}
 		} else {
-			if (mob->retargetTimer <= 0.0f) SurvivalMob_SetWanderTarget(mob);
-			dx = mob->targetX - e->Position.x;
-			dz = mob->targetZ - e->Position.z;
-			distance = Math_SqrtF(dx * dx + dz * dz);
-			if (distance > 0.3f) { dx /= distance; dz /= distance; }
-			else { dx = dz = 0.0f; }
+			if (mob->type == SURVIVAL_MOB_CREEPER) mob->fuseTimer = 0.0f;
+			if (distance < 1.35f) {
+				if (mob->attackTimer <= 0.0f && !Survival_IsDead()) {
+					Survival_DamageWithArmor(2);
+					mob->attackTimer = 1.25f;
+				}
+				dx = dz = 0.0f;
+			} else if (distance < 20.0f && distance > 0.001f) {
+				dx /= distance;
+				dz /= distance;
+			} else {
+				if (mob->retargetTimer <= 0.0f) SurvivalMob_SetWanderTarget(mob);
+				dx = mob->targetX - e->Position.x;
+				dz = mob->targetZ - e->Position.z;
+				distance = Math_SqrtF(dx * dx + dz * dz);
+				if (distance > 0.3f) { dx /= distance; dz /= distance; }
+				else { dx = dz = 0.0f; }
+			}
 		}
 		speed = 0.65f;
 	} else {
