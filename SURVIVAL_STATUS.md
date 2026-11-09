@@ -26,7 +26,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - A fixed 40-entity dropped-item pool; nearby same-item stacks merge, drops despawn after five minutes, and lava destroys them.
 - Tool durability is retained when a tool is dropped and collected.
 - Block placement consumes an item from the inventory.
-- Local Survival items include food, seeds, wheat, sticks, coal, ingots, crafting table, furnace, torches, hoes, pickaxes, axes, shovels, swords, iron and gold armor, and mob drops.
+- Local Survival items include food, seeds, wheat, sticks, coal, ingots, crafting table, furnace, torches, hoes, shears, pickaxes, axes, shovels, swords, iron and gold armor, and mob drops.
 
 ### Farming
 - Dandelion flowers can drop seeds.
@@ -44,7 +44,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - Smelting/cooking recipes now run as timed jobs: each item takes 10 seconds and one coal provides 80 seconds of fuel. Up to 16 jobs of the same output type can be queued. Fuel and progress survive save/load. There is still no graphical furnace interface.
 
 ### World and mobs
-- The existing ClassiCube Notchy generator creates a finite noise-based world with hills, caves, ores, water, flowers and trees. Normal Survival worlds use 128 × 128 horizontal dimensions and 128-block height on standard builds.
+- The existing ClassiCube Notchy generator creates finite noise-based worlds with hills, caves, ores, water, flowers, trees, and broad desert, tundra and forest regions. Deserts use sand surfaces, tundra gets a snow layer, and forests grow denser trees. Normal Survival worlds use 128 × 128 horizontal dimensions and 128-block height on standard builds.
 - A 20-minute day/night cycle adjusts sky, fog and sunlight colours.
 - Passive pigs, chickens and sheep spawn when a world loads and wander.
 - Zombies, skeletons, creepers and spiders can spawn at night and pursue the player. Zombies, skeletons and spiders attack at close range. Creepers pause and hiss with a 1.5-second fuse, then damage nearby players and break nearby non-bedrock blocks.
