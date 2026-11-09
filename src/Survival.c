@@ -2114,6 +2114,7 @@ static cc_bool Survival_ShearNearestSheep(void) {
 	BlockID held = Inventory_SelectedBlock;
 	Vec3 position;
 
+	if (!Entities.CurPlayer) return false;
 	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
 		struct SurvivalMob* mob = &survivalMobs[i];
 		float dx, dy, dz, distanceSq;
