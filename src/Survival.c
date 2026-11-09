@@ -159,6 +159,8 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_LEGGINGS, "Gold leggings", BLOCK_GOLD, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_BOOTS, "Gold boots", BLOCK_GOLD, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_SHEARS, "Shears", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_EGG, "Egg", BLOCK_WHITE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_FEATHER, "Feather", BLOCK_WHITE, false, false);
 }
 #endif
 
@@ -1937,6 +1939,7 @@ struct SurvivalMob {
 	float burnTimer;
 	float fuseTimer;
 	float grazeTimer;
+	float eggTimer;
 	cc_bool sheared;
 	cc_bool exploded;
 	cc_bool active;
@@ -2030,6 +2033,7 @@ static struct SurvivalMob* SurvivalMob_Spawn(int type, float x, float z) {
 	mob->entityID = id;
 	mob->type = type;
 	mob->health = mob->maxHealth = SurvivalMob_IsHostile(mob) ? 20 : 10;
+	if (type == SURVIVAL_MOB_CHICKEN) mob->eggTimer = 300.0f + (float)Random_Next(&survivalRng, 301);
 	mob->active = true;
 
 	Entity_Init(&mob->Base);
@@ -2084,6 +2088,7 @@ static void SurvivalMob_Die(struct SurvivalMob* mob) {
 		break;
 	case SURVIVAL_MOB_CHICKEN:
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_FEATHER, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SHEEP:
 		if (!mob->sheared) SurvivalMob_AddDrop(mob, BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
@@ -2305,6 +2310,16 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 	e->next.pos = e->Position;
 	AnimatedComp_Update(e, oldPos, e->Position, delta);
 	SoundsComp_Tick(&mob->Sounds, wasOnGround);
+
+	if (mob->type == SURVIVAL_MOB_CHICKEN) {
+		mob->eggTimer -= delta;
+		if (mob->eggTimer <= 0.0f) {
+			Vec3 eggPosition = e->Position;
+			eggPosition.y += 0.25f;
+			SurvivalItem_Spawn(BLOCK_ITEM_EGG, 1, eggPosition);
+			mob->eggTimer = 300.0f + (float)Random_Next(&survivalRng, 301);
+		}
+	}
 
 	if (mob->type == SURVIVAL_MOB_SHEEP && mob->sheared && e->OnGround) {
 		int gx = Math_Floor(e->Position.x);
