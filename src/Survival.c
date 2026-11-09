@@ -54,6 +54,7 @@ struct SurvivalCrop {
 	cc_bool hydrated, active;
 };
 static struct SurvivalCrop survivalCrops[SURVIVAL_CROP_SLOTS];
+static void Survival_UseToolDurability(BlockID block);
 static void Survival_CropTick(float delta);
 static void Survival_CropRebuild(void);
 
@@ -570,6 +571,10 @@ static cc_bool Survival_PlantSeeds(void) {
 		!World_Contains(cropPos.x, cropPos.y, cropPos.z) ||
 		World_GetBlock(cropPos.x, cropPos.y, cropPos.z) != BLOCK_AIR) {
 		Chat_AddRaw("&ePlant seeds on top of farmland.");
+		return true;
+	}
+	if (Survival_GetItemCount(BLOCK_ITEM_SEEDS) <= 0) {
+		Chat_AddRaw("&eYou need seeds to plant crops.");
 		return true;
 	}
 	if (!Survival_CropRegister(cropPos.x, cropPos.y, cropPos.z)) {
