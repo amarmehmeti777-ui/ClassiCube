@@ -1239,6 +1239,7 @@ struct SurvivalMob {
 	float retargetTimer;
 	float attackTimer;
 	float hurtTimer;
+	float burnTimer;
 	cc_bool active;
 };
 
@@ -1419,6 +1420,19 @@ static void SurvivalMob_SetWanderTarget(struct SurvivalMob* mob) {
 	mob->retargetTimer = 2.0f + (float)Random_Next(&survivalRng, 400) / 100.0f;
 }
 
+static cc_bool SurvivalMob_ExposedToSky(struct Entity* e) {
+	int x = Math_Floor(e->Position.x);
+	int y = Math_Floor(e->Position.y + e->Size.y - 0.1f);
+	int z = Math_Floor(e->Position.z);
+	if (!World_Contains(x, 0, z)) return false;
+	if (y < 0) y = 0;
+	for (; y < World.Height; y++) {
+		BlockID block = World_SafeGetBlock(x, y, z);
+		if (Blocks.BlocksLight[block]) return false;
+	}
+	return true;
+}
+
 static void SurvivalMob_Tick(struct Entity* e, float delta) {
 	struct SurvivalMob* mob = (struct SurvivalMob*)e;
 	struct LocalPlayer* player = Entities.CurPlayer;
@@ -1432,6 +1446,22 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 	mob->retargetTimer -= delta;
 	mob->attackTimer -= delta;
 	mob->hurtTimer -= delta;
+
+	/* Zombies and skeletons burn in direct daylight, but are safe under a roof. */
+	if ((mob->type == SURVIVAL_MOB_ZOMBIE || mob->type == SURVIVAL_MOB_SKELETON) &&
+		!Survival_IsNight() && SurvivalMob_ExposedToSky(e)) {
+		mob->burnTimer += delta;
+		if (mob->burnTimer >= 1.0f) {
+			mob->burnTimer -= 1.0f;
+			mob->health -= 2;
+			if (mob->health <= 0) {
+				SurvivalMob_Die(mob);
+				return;
+			}
+		}
+	} else {
+		mob->burnTimer = 0.0f;
+	}
 
 	if (hostile) {
 		dx = player->Base.Position.x - e->Position.x;
