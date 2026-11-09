@@ -37,6 +37,10 @@ Food can be eaten with right-click even when you are looking at empty air.
 7. Break mature wheat to collect wheat and more seeds.
 8. Enter `/client craft bread` near a crafting table to turn three wheat into bread.
 
+## Beds and respawn
+
+Craft a bed with `/client craft bed` (three wool and three planks) near a crafting table, then place it. At night, stand near the bed and enter `/client sleep`. Nearby hostile mobs prevent sleeping. A successful sleep skips to morning and saves that location as your respawn point.
+
 ## Armor, food, combat and death
 
 Craft iron armor with `/client craft iron_helmet`, `/client craft iron_chestplate`, `/client craft iron_leggings` and `/client craft iron_boots` near a crafting table. Select each piece in the hotbar and right-click to equip it. The armor row appears above the hearts. Armor reduces damage from hostile mobs and wears down when hit. If you die, equipped armor drops with your other inventory items.
@@ -49,7 +53,7 @@ Select food in your hotbar and right-click to eat. Pigs and chickens provide mea
 
 Enter `/client craft help` in chat to see all recipes. Smelting/cooking commands now start timed furnace jobs: each item takes 10 seconds, one coal fuels up to eight jobs, and up to 16 jobs of the same output can be queued. The queue and remaining fuel are saved with the world. The furnace still has no graphical interface.
 
-Use ClassiCube's normal pause/save-level flow. Keep the companion `.survival` file beside its map file when moving a world to another computer. Crop stages and placed farmland are saved in the map; the crop's partial growth timer restarts when the map is loaded.
+Use ClassiCube's normal pause/save-level flow. Keep the version 8 companion `.survival` file beside its map file when moving a world to another computer. Crop stages and placed farmland are saved in the map; the crop's partial growth timer restarts when the map is loaded.
 
 ## Known differences
 
