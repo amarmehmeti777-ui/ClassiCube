@@ -153,6 +153,10 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_LEGGINGS, "Iron leggings", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_BOOTS, "Iron boots", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_BED, "Bed", BLOCK_RED, true, true);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_HELMET, "Gold helmet", BLOCK_GOLD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_CHESTPLATE, "Gold chestplate", BLOCK_GOLD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_LEGGINGS, "Gold leggings", BLOCK_GOLD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_BOOTS, "Gold boots", BLOCK_GOLD, false, false);
 }
 #endif
 
@@ -175,10 +179,10 @@ static cc_bool Survival_IsTool(BlockID block) {
 
 static int Survival_ArmorSlot(BlockID block) {
 	switch (block) {
-	case BLOCK_ITEM_IRON_HELMET: return 0;
-	case BLOCK_ITEM_IRON_CHESTPLATE: return 1;
-	case BLOCK_ITEM_IRON_LEGGINGS: return 2;
-	case BLOCK_ITEM_IRON_BOOTS: return 3;
+	case BLOCK_ITEM_IRON_HELMET: case BLOCK_ITEM_GOLD_HELMET: return 0;
+	case BLOCK_ITEM_IRON_CHESTPLATE: case BLOCK_ITEM_GOLD_CHESTPLATE: return 1;
+	case BLOCK_ITEM_IRON_LEGGINGS: case BLOCK_ITEM_GOLD_LEGGINGS: return 2;
+	case BLOCK_ITEM_IRON_BOOTS: case BLOCK_ITEM_GOLD_BOOTS: return 3;
 	default: return -1;
 	}
 }
@@ -193,6 +197,10 @@ static int Survival_ArmorMaxDurability(BlockID block) {
 	case BLOCK_ITEM_IRON_CHESTPLATE: return 240;
 	case BLOCK_ITEM_IRON_LEGGINGS: return 225;
 	case BLOCK_ITEM_IRON_BOOTS: return 195;
+	case BLOCK_ITEM_GOLD_HELMET: return 77;
+	case BLOCK_ITEM_GOLD_CHESTPLATE: return 112;
+	case BLOCK_ITEM_GOLD_LEGGINGS: return 105;
+	case BLOCK_ITEM_GOLD_BOOTS: return 91;
 	default: return 0;
 	}
 }
@@ -1317,10 +1325,13 @@ void Survival_Damage(int amount) {
 }
 
 static int Survival_ArmorPoints(void) {
-	static const int points[SURVIVAL_ARMOR_SLOTS] = { 2, 6, 5, 2 };
+	static const int ironPoints[SURVIVAL_ARMOR_SLOTS] = { 2, 6, 5, 2 };
+	static const int goldPoints[SURVIVAL_ARMOR_SLOTS] = { 2, 5, 3, 1 };
 	int i, total = 0;
 	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
-		if (equippedArmor[i] != BLOCK_AIR && equippedArmorDurability[i] > 0) total += points[i];
+		if (equippedArmor[i] == BLOCK_AIR || equippedArmorDurability[i] <= 0) continue;
+		total += (equippedArmor[i] >= BLOCK_ITEM_GOLD_HELMET &&
+			equippedArmor[i] <= BLOCK_ITEM_GOLD_BOOTS) ? goldPoints[i] : ironPoints[i];
 	}
 	return total;
 }
@@ -1708,6 +1719,7 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
 		Chat_AddRaw("&a/craft wooden_hoe|stone_hoe|iron_hoe");
 		Chat_AddRaw("&a/craft iron_helmet|iron_chestplate|iron_leggings|iron_boots");
+		Chat_AddRaw("&a/craft gold_helmet|gold_chestplate|gold_leggings|gold_boots");
 		Chat_AddRaw("&a/craft bed &7- 3 wool + 3 planks");
 		Chat_AddRaw("&aPlace a bed and use /client sleep at night.");
 		Chat_AddRaw("&aRight-click armor from your hotbar to equip it.");
@@ -1758,6 +1770,14 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 7, BLOCK_AIR, 0, BLOCK_ITEM_IRON_LEGGINGS, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_boots")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 4, BLOCK_AIR, 0, BLOCK_ITEM_IRON_BOOTS, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "gold_helmet")) {
+		Survival_CraftRecipe(BLOCK_ITEM_GOLD_INGOT, 5, BLOCK_AIR, 0, BLOCK_ITEM_GOLD_HELMET, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "gold_chestplate")) {
+		Survival_CraftRecipe(BLOCK_ITEM_GOLD_INGOT, 8, BLOCK_AIR, 0, BLOCK_ITEM_GOLD_CHESTPLATE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "gold_leggings")) {
+		Survival_CraftRecipe(BLOCK_ITEM_GOLD_INGOT, 7, BLOCK_AIR, 0, BLOCK_ITEM_GOLD_LEGGINGS, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "gold_boots")) {
+		Survival_CraftRecipe(BLOCK_ITEM_GOLD_INGOT, 4, BLOCK_AIR, 0, BLOCK_ITEM_GOLD_BOOTS, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_pickaxe")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_axe")) {
