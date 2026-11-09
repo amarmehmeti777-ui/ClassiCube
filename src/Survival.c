@@ -46,6 +46,17 @@ static int dayCycleStep;
 static BlockID miningBlock;
 static float miningProgress;
 
+#define SURVIVAL_CROP_SLOTS 512
+#define SURVIVAL_CROP_GROW_TIME 90.0f
+struct SurvivalCrop {
+	int x, y, z;
+	float growthTimer, hydrationTimer;
+	cc_bool hydrated, active;
+};
+static struct SurvivalCrop survivalCrops[SURVIVAL_CROP_SLOTS];
+static void Survival_CropTick(float delta);
+static void Survival_CropRebuild(void);
+
 
 #ifndef CC_BUILD_TINYMEM
 static void Survival_DefineVirtualItem(BlockID id, const char* name, BlockID templateBlock, cc_bool placeable, cc_bool solid) {
@@ -106,6 +117,26 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_AXE, "Iron axe", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_SHOVEL, "Iron shovel", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_SWORD, "Iron sword", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_FARMLAND, "Farmland", BLOCK_DIRT, true, true);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_0, "Wheat crop", BLOCK_SAPLING, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_1, "Growing wheat", BLOCK_SAPLING, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_2, "Growing wheat", BLOCK_SAPLING, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_3, "Growing wheat", BLOCK_SAPLING, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_4, "Growing wheat", BLOCK_DANDELION, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_5, "Growing wheat", BLOCK_DANDELION, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_6, "Growing wheat", BLOCK_DANDELION, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_CROP_7, "Mature wheat", BLOCK_DANDELION, false, false);
+	Blocks.CanDelete[BLOCK_ITEM_CROP_0] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_1] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_2] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_3] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_4] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_5] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_6] = true;
+	Blocks.CanDelete[BLOCK_ITEM_CROP_7] = true;
+	Survival_DefineVirtualItem(BLOCK_ITEM_WOOD_HOE, "Wooden hoe", BLOCK_WOOD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_STONE_HOE, "Stone hoe", BLOCK_STONE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_HOE, "Iron hoe", BLOCK_IRON, false, false);
 }
 #endif
 
@@ -122,14 +153,15 @@ static cc_bool Survival_IsTool(BlockID block) {
 	return block == BLOCK_ITEM_WOOD_PICKAXE || block == BLOCK_ITEM_STONE_PICKAXE || block == BLOCK_ITEM_IRON_PICKAXE ||
 		block == BLOCK_ITEM_WOOD_AXE || block == BLOCK_ITEM_STONE_AXE || block == BLOCK_ITEM_IRON_AXE ||
 		block == BLOCK_ITEM_WOOD_SHOVEL || block == BLOCK_ITEM_STONE_SHOVEL || block == BLOCK_ITEM_IRON_SHOVEL ||
-		block == BLOCK_ITEM_WOOD_SWORD || block == BLOCK_ITEM_STONE_SWORD || block == BLOCK_ITEM_IRON_SWORD;
+		block == BLOCK_ITEM_WOOD_SWORD || block == BLOCK_ITEM_STONE_SWORD || block == BLOCK_ITEM_IRON_SWORD ||
+		block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE;
 }
 
 static int Survival_ToolMaxDurability(BlockID block) {
 	switch (block) {
-	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: case BLOCK_ITEM_WOOD_SWORD: return 60;
-	case BLOCK_ITEM_STONE_PICKAXE: case BLOCK_ITEM_STONE_AXE: case BLOCK_ITEM_STONE_SHOVEL: case BLOCK_ITEM_STONE_SWORD: return 132;
-	case BLOCK_ITEM_IRON_PICKAXE: case BLOCK_ITEM_IRON_AXE: case BLOCK_ITEM_IRON_SHOVEL: case BLOCK_ITEM_IRON_SWORD: return 251;
+	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: case BLOCK_ITEM_WOOD_SWORD: case BLOCK_ITEM_WOOD_HOE: return 60;
+	case BLOCK_ITEM_STONE_PICKAXE: case BLOCK_ITEM_STONE_AXE: case BLOCK_ITEM_STONE_SHOVEL: case BLOCK_ITEM_STONE_SWORD: case BLOCK_ITEM_STONE_HOE: return 132;
+	case BLOCK_ITEM_IRON_PICKAXE: case BLOCK_ITEM_IRON_AXE: case BLOCK_ITEM_IRON_SHOVEL: case BLOCK_ITEM_IRON_SWORD: case BLOCK_ITEM_IRON_HOE: return 251;
 	default: return 0;
 	}
 }
@@ -441,10 +473,141 @@ static void Survival_DropInventory(void) {
 }
 
 
+
+static cc_bool Survival_IsCrop(BlockID block) {
+	return block >= BLOCK_ITEM_CROP_0 && block <= BLOCK_ITEM_CROP_7;
+}
+
+static cc_bool Survival_CropRegister(int x, int y, int z) {
+	int i;
+	for (i = 0; i < SURVIVAL_CROP_SLOTS; i++) {
+		struct SurvivalCrop* crop = &survivalCrops[i];
+		if (crop->active && crop->x == x && crop->y == y && crop->z == z) return true;
+	}
+	for (i = 0; i < SURVIVAL_CROP_SLOTS; i++) {
+		struct SurvivalCrop* crop = &survivalCrops[i];
+		if (crop->active) continue;
+		Mem_Set(crop, 0, sizeof(*crop));
+		crop->x = x; crop->y = y; crop->z = z;
+		crop->hydrationTimer = 15.0f;
+		crop->active = true;
+		return true;
+	}
+	return false;
+}
+
+static cc_bool Survival_CropHasWater(int x, int y, int z) {
+	int dx, dy, dz;
+	for (dy = -1; dy <= 1; dy++) {
+		for (dz = -4; dz <= 4; dz++) {
+			for (dx = -4; dx <= 4; dx++) {
+				BlockID block = World_SafeGetBlock(x + dx, y + dy, z + dz);
+				if (block == BLOCK_WATER || block == BLOCK_STILL_WATER) return true;
+			}
+		}
+	}
+	return false;
+}
+
+static cc_bool Survival_CropHasSky(int x, int y, int z) {
+	for (y++; y < World.Height; y++) {
+		BlockID block = World_SafeGetBlock(x, y, z);
+		if (Blocks.BlocksLight[block]) return false;
+	}
+	return true;
+}
+
+static void Survival_CropTick(float delta) {
+	int i;
+	for (i = 0; i < SURVIVAL_CROP_SLOTS; i++) {
+		struct SurvivalCrop* crop = &survivalCrops[i];
+		BlockID block;
+		IVec3 pos;
+		if (!crop->active) continue;
+		block = World_SafeGetBlock(crop->x, crop->y, crop->z);
+		if (!Survival_IsCrop(block) ||
+			World_SafeGetBlock(crop->x, crop->y - 1, crop->z) != BLOCK_ITEM_FARMLAND) {
+			crop->active = false;
+			continue;
+		}
+		if (block == BLOCK_ITEM_CROP_7) continue;
+
+		crop->hydrationTimer -= delta;
+		if (crop->hydrationTimer <= 0.0f) {
+			crop->hydrated = Survival_CropHasWater(crop->x, crop->y - 1, crop->z);
+			crop->hydrationTimer = 15.0f;
+		}
+		if (!Survival_CropHasSky(crop->x, crop->y, crop->z)) continue;
+
+		crop->growthTimer += delta * (crop->hydrated ? 1.0f : 0.5f);
+		if (crop->growthTimer < SURVIVAL_CROP_GROW_TIME) continue;
+		crop->growthTimer = 0.0f;
+		pos.x = crop->x; pos.y = crop->y; pos.z = crop->z;
+		Game_ChangeBlock(crop->x, crop->y, crop->z, (BlockID)(block + 1));
+		Event_RaiseBlock(&UserEvents.BlockChanged, pos, block, (BlockID)(block + 1));
+	}
+}
+
+static void Survival_CropRebuild(void) {
+	int x, y, z;
+	Mem_Set(survivalCrops, 0, sizeof(survivalCrops));
+	for (y = 0; y < World.Height; y++) {
+		for (z = 0; z < World.Length; z++) {
+			for (x = 0; x < World.Width; x++) {
+				if (Survival_IsCrop(World_GetBlock(x, y, z))) Survival_CropRegister(x, y, z);
+			}
+		}
+	}
+}
+
+static cc_bool Survival_PlantSeeds(void) {
+	IVec3 soil, cropPos;
+	if (!Game_SelectedPos.valid) return true;
+	soil = Game_SelectedPos.pos;
+	cropPos = Game_SelectedPos.translatedPos;
+	if (World_SafeGetBlock(soil.x, soil.y, soil.z) != BLOCK_ITEM_FARMLAND ||
+		cropPos.x != soil.x || cropPos.z != soil.z || cropPos.y != soil.y + 1 ||
+		!World_Contains(cropPos.x, cropPos.y, cropPos.z) ||
+		World_GetBlock(cropPos.x, cropPos.y, cropPos.z) != BLOCK_AIR) {
+		Chat_AddRaw("&ePlant seeds on top of farmland.");
+		return true;
+	}
+	if (!Survival_CropRegister(cropPos.x, cropPos.y, cropPos.z)) {
+		Chat_AddRaw("&eToo many crops are planted in this world.");
+		return true;
+	}
+	if (!Survival_InventoryRemove(BLOCK_ITEM_SEEDS, 1)) return true;
+	Game_ChangeBlock(cropPos.x, cropPos.y, cropPos.z, BLOCK_ITEM_CROP_0);
+	Event_RaiseBlock(&UserEvents.BlockChanged, cropPos, BLOCK_AIR, BLOCK_ITEM_CROP_0);
+	return true;
+}
+
+static cc_bool Survival_UseHoe(BlockID hoe) {
+	IVec3 pos, above;
+	BlockID old;
+	if (!Game_SelectedPos.valid) return true;
+	pos = Game_SelectedPos.pos;
+	if (!World_Contains(pos.x, pos.y, pos.z)) return true;
+	old = World_GetBlock(pos.x, pos.y, pos.z);
+	above.x = pos.x; above.y = pos.y + 1; above.z = pos.z;
+	if ((old != BLOCK_GRASS && old != BLOCK_DIRT) || !World_Contains(above.x, above.y, above.z) ||
+		World_GetBlock(above.x, above.y, above.z) != BLOCK_AIR) return true;
+
+	Game_ChangeBlock(pos.x, pos.y, pos.z, BLOCK_ITEM_FARMLAND);
+	Event_RaiseBlock(&UserEvents.BlockChanged, pos, old, BLOCK_ITEM_FARMLAND);
+	Survival_UseToolDurability(old);
+	(void)hoe;
+	return true;
+}
+
+static void Survival_UseToolDurability(BlockID block);
+
 cc_bool Survival_UseItem(BlockID block) {
 	int points = 0;
 	float sat = 0.0f;
 	if (!Survival_IsActive()) return false;
+	if (block == BLOCK_ITEM_SEEDS) return Survival_PlantSeeds();
+	if (block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE) return Survival_UseHoe(block);
 
 	switch (block) {
 	case BLOCK_ITEM_APPLE: points = 4; sat = 2.4f; break;
@@ -562,7 +725,11 @@ static void Survival_UseToolDurability(BlockID block) {
 	case BLOCK_LOG: case BLOCK_WOOD: case BLOCK_BOOKSHELF: case BLOCK_CRATE:
 		usesTool = held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE || held == BLOCK_ITEM_IRON_AXE;
 		break;
-	case BLOCK_DIRT: case BLOCK_GRASS: case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
+	case BLOCK_DIRT: case BLOCK_GRASS:
+		usesTool = held == BLOCK_ITEM_WOOD_HOE || held == BLOCK_ITEM_STONE_HOE || held == BLOCK_ITEM_IRON_HOE ||
+			held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL;
+		break;
+	case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
 		usesTool = held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL;
 		break;
 	}
@@ -576,6 +743,10 @@ static void Survival_UseToolDurability(BlockID block) {
 }
 
 static BlockID Survival_GetBlockDrop(BlockID block) {
+	if (block == BLOCK_ITEM_FARMLAND) return BLOCK_DIRT;
+	if (block == BLOCK_DANDELION) return BLOCK_ITEM_SEEDS;
+	if (block == BLOCK_ITEM_CROP_7) return BLOCK_ITEM_WHEAT;
+	if (Survival_IsCrop(block)) return Random_Next(&survivalRng, 3) == 0 ? BLOCK_ITEM_SEEDS : BLOCK_AIR;
 	if (block == BLOCK_GRASS) return BLOCK_DIRT;
 	if (block == BLOCK_STONE) return Survival_HasPickaxe() ? BLOCK_COBBLE : BLOCK_AIR;
 	if (block == BLOCK_COBBLE || block == BLOCK_BRICK || block == BLOCK_STONE_BRICK ||
@@ -606,6 +777,9 @@ void Survival_OnBlockBroken(BlockID block, int x, int y, int z) {
 	position.y = y + 0.5f;
 	position.z = z + 0.5f;
 	SurvivalItem_Spawn(drop, 1, position);
+	if (block == BLOCK_ITEM_CROP_7) {
+		SurvivalItem_Spawn(BLOCK_ITEM_SEEDS, 1 + Random_Next(&survivalRng, 3), position);
+	}
 }
 
 static void SurvivalMob_ClearAll(void);
@@ -626,6 +800,7 @@ static void Survival_OnNewMap(void) {
 	SurvivalItem_ClearAll();
 	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
+	Mem_Set(survivalCrops, 0, sizeof(survivalCrops));
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	SurvivalItem_ClearAll();
@@ -1008,6 +1183,7 @@ static cc_bool Survival_Tick(struct ScheduledTask2* task) {
 	const float dt = task->interval;
 	if (!Survival_IsActive()) return true;
 	Survival_UpdateDayNight(dt);
+	Survival_CropTick(dt);
 	if (Survival_IsNight()) {
 		hostileSpawnTimer += dt;
 		if (hostileSpawnTimer >= 12.0f && SurvivalMob_Count(true) < 5) {
@@ -1198,6 +1374,9 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft wooden_axe|stone_axe|iron_axe");
 		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel|iron_shovel");
 		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
+		Chat_AddRaw("&a/craft wooden_hoe|stone_hoe|iron_hoe");
+		Chat_AddRaw("&a/craft bread &7- 3 wheat");
+		Chat_AddRaw("&aUse hoes on dirt/grass, then plant seeds on farmland.");
 		Chat_AddRaw("&a/craft smelt_iron|smelt_gold|cook_pork|cook_beef|cook_chicken");
 		return;
 	}
@@ -1224,6 +1403,14 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_WOOD, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_WOOD_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "stone_shovel")) {
 		Survival_CraftRecipe(BLOCK_COBBLE, 1, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_SHOVEL, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "bread")) {
+		Survival_CraftRecipe(BLOCK_ITEM_WHEAT, 3, BLOCK_AIR, 0, BLOCK_ITEM_BREAD, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "wooden_hoe")) {
+		Survival_CraftRecipe(BLOCK_WOOD, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_WOOD_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "stone_hoe")) {
+		Survival_CraftRecipe(BLOCK_COBBLE, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_hoe")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_pickaxe")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_axe")) {
@@ -1642,6 +1829,7 @@ cc_bool Survival_AttackMob(void) {
 
 static void Survival_OnNewMapLoaded(void) {
 	if (!Survival_IsActive()) return;
+	Survival_CropRebuild();
 	Survival_RefreshInventoryMap();
 	SurvivalMob_ClearAll();
 	Survival_SpawnInitialAnimals();
