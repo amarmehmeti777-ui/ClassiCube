@@ -224,6 +224,7 @@ struct SurvivalItem {
 	int entityID;
 	BlockID block;
 	int count;
+	int durability;
 	float age, pickupDelay;
 	cc_bool active;
 };
@@ -316,12 +317,17 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 	distanceSq = dx * dx + dy * dy + dz * dz;
 	if (distanceSq > 1.75f * 1.75f) return;
 
-	added = Survival_InventoryAdd(item->block, item->count);
+	{
+		BlockID block = item->block;
+		int durability = item->durability;
+		added = Survival_InventoryAdd(block, item->count);
+		if (added > 0 && Survival_IsTool(block) && durability > 0) toolDurability[block] = durability;
+	}
 	item->count -= added;
 	if (item->count <= 0) Entities_Remove(item->entityID);
 }
 
-static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
+static void SurvivalItem_SpawnEx(BlockID block, int amount, Vec3 position, int durability) {
 	static const cc_string blockModel = String_FromConst("block");
 	int remaining = amount, i;
 
@@ -333,7 +339,8 @@ static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 		struct SurvivalItem* existing = &survivalItems[i];
 		float dx, dy, dz;
 		int room, merged;
-		if (!existing->active || existing->block != block || existing->count >= SURVIVAL_INVENTORY_STACK_SIZE) continue;
+		if (!existing->active || existing->block != block || existing->count >= SURVIVAL_INVENTORY_STACK_SIZE ||
+			Survival_ItemMaxStack(block) <= 1 || existing->durability != durability) continue;
 		dx = existing->Base.Position.x - position.x;
 		dy = existing->Base.Position.y - position.y;
 		dz = existing->Base.Position.z - position.z;
@@ -348,6 +355,7 @@ static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 		int id, count;
 		if (!item) {
 			int added = Survival_InventoryAdd(block, remaining);
+			if (added > 0 && Survival_IsTool(block) && durability > 0) toolDurability[block] = durability;
 			if (added < remaining) Chat_AddRaw("&eThere is no room for more dropped items.");
 			return;
 		}
@@ -359,6 +367,7 @@ static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 		item->entityID = id;
 		item->block = block;
 		item->count = count;
+		item->durability = durability;
 		item->pickupDelay = 0.45f;
 		item->active = true;
 
@@ -392,6 +401,10 @@ static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 	}
 }
 
+static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
+	SurvivalItem_SpawnEx(block, amount, position, 0);
+}
+
 static void SurvivalItem_ClearAll(void) {
 	int i;
 	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
@@ -401,11 +414,13 @@ static void SurvivalItem_ClearAll(void) {
 
 static void Survival_DropInventory(void) {
 	int drops[BLOCK_COUNT];
+	int dropDurability[BLOCK_COUNT];
 	int i;
 	Vec3 position;
 	if (!Survival_IsActive() || !Entities.CurPlayer) return;
 
 	Mem_Copy(drops, itemCounts, sizeof(drops));
+	Mem_Copy(dropDurability, toolDurability, sizeof(dropDurability));
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
 	Mem_Set(toolDurability, 0, sizeof(toolDurability));
 	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) {
@@ -417,7 +432,10 @@ static void Survival_DropInventory(void) {
 	position = Entities.CurPlayer->Base.Position;
 	position.y += 0.25f;
 	for (i = 1; i < BLOCK_COUNT; i++) {
-		if (drops[i] > 0) SurvivalItem_Spawn((BlockID)i, drops[i], position);
+		if (drops[i] > 0) {
+			SurvivalItem_SpawnEx((BlockID)i, drops[i], position,
+				Survival_IsTool((BlockID)i) ? dropDurability[i] : 0);
+		}
 	}
 	Chat_AddRaw("&cYou dropped your inventory.");
 }
@@ -637,7 +655,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 16];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18];
 	cc_uint16 dayTicks;
 	int i, itemTypes = 0, droppedCount = 0, offset = 14;
 	cc_result res;
@@ -649,7 +667,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 4;
+	data[4] = 5;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -694,6 +712,8 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		data[offset++] = (cc_uint8)(item->block >> 8);
 		data[offset++] = (cc_uint8)(item->count & 0xFF);
 		data[offset++] = (cc_uint8)(item->count >> 8);
+		data[offset++] = (cc_uint8)(item->durability & 0xFF);
+		data[offset++] = (cc_uint8)(item->durability >> 8);
 		Mem_Copy(&bits, &item->Base.Position.x, sizeof(bits));
 		data[offset++] = (cc_uint8)(bits & 0xFF); data[offset++] = (cc_uint8)((bits >> 8) & 0xFF);
 		data[offset++] = (cc_uint8)((bits >> 16) & 0xFF); data[offset++] = (cc_uint8)(bits >> 24);
@@ -743,7 +763,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
@@ -769,7 +789,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 			return ERR_INVALID_ARGUMENT;
 		}
 		if (droppedCount > 0) {
-			res = Stream_Read(&stream, data + droppedOffset + 1, (cc_uint32)droppedCount * 16U);
+			res = Stream_Read(&stream, data + droppedOffset + 1, (cc_uint32)droppedCount * (data[4] >= 5 ? 18U : 16U));
 			if (res) {
 				stream.Close(&stream);
 				return res;
@@ -837,9 +857,10 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		for (i = 0; i < droppedCount; i++) {
 			cc_uint16 block = (cc_uint16)(data[offset] | ((cc_uint16)data[offset + 1] << 8));
 			cc_uint16 amount = (cc_uint16)(data[offset + 2] | ((cc_uint16)data[offset + 3] << 8));
+			cc_uint16 durability = data[4] >= 5 ? (cc_uint16)(data[offset + 4] | ((cc_uint16)data[offset + 5] << 8)) : 0;
 			cc_uint32 bx, by, bz;
 			Vec3 position;
-			offset += 4;
+			offset += data[4] >= 5 ? 6 : 4;
 			bx = (cc_uint32)data[offset] | ((cc_uint32)data[offset + 1] << 8) |
 				((cc_uint32)data[offset + 2] << 16) | ((cc_uint32)data[offset + 3] << 24);
 			offset += 4;
@@ -857,7 +878,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 			if (position.x != position.x || position.y != position.y || position.z != position.z) continue;
 			if (position.x < 0.0f || position.x >= World.Width || position.y < 0.0f ||
 				position.y >= World.Height || position.z < 0.0f || position.z >= World.Length) continue;
-			SurvivalItem_Spawn((BlockID)block, amount, position);
+			SurvivalItem_SpawnEx((BlockID)block, amount, position, durability);
 		}
 	}
 	Survival_RefreshInventoryMap();
