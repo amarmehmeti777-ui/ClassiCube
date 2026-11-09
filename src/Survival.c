@@ -1541,7 +1541,7 @@ void Survival_OnPlayerPhysics(struct LocalPlayer* player) {
 	} else if (entity->OnGround && fallActive) {
 		if (fallLastY > entity->Position.y) fallDistance += fallLastY - entity->Position.y;
 		damage = Math_Floor(fallDistance - 3.0f);
-		if (damage > 0) Survival_Damage(damage);
+		if (damage > 0) Survival_DamageWithArmor(damage);
 		fallActive = false;
 		fallDistance = 0.0f;
 	}
