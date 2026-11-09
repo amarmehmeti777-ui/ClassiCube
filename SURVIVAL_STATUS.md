@@ -35,7 +35,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - Crops need an open sky view; water within four blocks hydrates nearby farmland.
 - Hydrated crops advance one growth stage every 90 in-game seconds; dry crops take 180 seconds per stage.
 - Mature wheat drops wheat and additional seeds; three wheat can be crafted into bread.
-- Crop tracking is capped at 512 plants. Crop stages are saved as map blocks; the partial growth timer resets when a map is reloaded.
+- Crop tracking is capped at 512 plants. Crop stages are saved as map blocks, and sidecar v9 preserves each crop's partial growth timer and hydration state.
 
 ### Crafting and smelting
 - Chat command: `/client craft help`.
@@ -54,7 +54,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 ### Saving
 - The map stores placed blocks and crop growth stages in the normal ClassiCube map data.
 - A companion `.survival` sidecar stores health, hunger, air, inventory stacks, tool durability, hotbar layout, day/night time, dropped item stacks with positions/durability, and the furnace queue/fuel/progress.
-- Sidecar version 8 stores equipped armor and the custom respawn point, and reads versions 1–7 as well.
+- Sidecar version 9 stores equipped armor, the custom respawn point, and crop growth/hydration timers; it reads versions 1–8 as well.
 - Keep the `.survival` sidecar beside its map when moving the world.
 
 ## Still missing compared with Minecraft Beta 1.7.3
@@ -68,4 +68,4 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 
 ## Build status
 
-The 32-bit Windows Direct3D 9 and OpenGL 1.1 clients compiled successfully in GitHub Actions for source commit `37f9019cbafc713d082377c3e407e3ebc9614d2e`. The executables are in the `ClassiCube-Survival-Windows-32-bit` Actions artifact. The client still needs in-game testing on the target PC.
+The 32-bit Windows Direct3D 9 and OpenGL 1.1 clients compiled successfully in GitHub Actions for source commit `a784d2910f004cd564d69a0ba8809f69655ec59e`. The executables are in the `ClassiCube-Survival-Windows-32-bit` Actions artifact. The client still needs in-game testing on the target PC.
