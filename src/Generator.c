@@ -245,7 +245,13 @@ static float CombinedNoise_Calc(const struct CombinedNoise* n, float x, float y)
 *#########################################################################################################################*/
 static int waterLevel, minHeight;
 static cc_int16* heightmap;
+static cc_uint8* biomeMap;
 static RNGState rnd;
+
+#define BIOME_PLAINS 0
+#define BIOME_DESERT 1
+#define BIOME_TUNDRA 2
+#define BIOME_FOREST 3
 
 static void NotchyGen_FillOblateSpheroid(int x, int y, int z, float radius, BlockRaw block) {
 	int xBeg = Math_Floor(max(x - radius, 0));
@@ -569,12 +575,13 @@ static void NotchyGen_FloodFillLava(void) {
 	}
 }
 
-static void NotchyGen_CreateSurfaceLayer(void) {	
+static void NotchyGen_CreateSurfaceLayer(void) {
 	int hIndex = 0, index;
 	BlockRaw above;
-	int x, y, z;
+	int x, y, z, biome;
+	float temperature, moisture;
 #if CC_BUILD_MAXSTACK <= (16 * 1024)
-	struct NoiseBuffer { 
+	struct NoiseBuffer {
 		struct OctaveNoise n1, n2;
 	};
 	struct NoiseBuffer* buf = TempMem_Alloc(sizeof(struct NoiseBuffer));
@@ -589,22 +596,39 @@ static void NotchyGen_CreateSurfaceLayer(void) {
 	OctaveNoise_Init(n1, &rnd, 8);
 	OctaveNoise_Init(n2, &rnd, 8);
 
-	Gen_CurrentState = "Creating surface";
+	Gen_CurrentState = "Creating surface and biomes";
 	for (z = 0; z < World.Length; z++) {
 		Gen_CurrentProgress = (float)z / World.Length;
 
 		for (x = 0; x < World.Width; x++) {
+			/* Sample climate at low frequency to create broad regions. */
+			temperature = OctaveNoise_Calc(n1, x * 0.015f, z * 0.015f);
+			moisture    = OctaveNoise_Calc(n2, x * 0.015f, z * 0.015f);
+			if (temperature > 4.0f && moisture < 0.0f) biome = BIOME_DESERT;
+			else if (temperature < -4.0f) biome = BIOME_TUNDRA;
+			else if (moisture > 4.0f) biome = BIOME_FOREST;
+			else biome = BIOME_PLAINS;
+			biomeMap[hIndex] = (cc_uint8)biome;
+
 			y = heightmap[hIndex++];
 			if (y < 0 || y >= World.Height) continue;
 
 			index = World_Pack(x, y, z);
 			above = y >= World.MaxY ? BLOCK_AIR : Gen_Blocks[index + World.OneY];
 
-			/* TODO: update heightmap */
 			if (above == BLOCK_STILL_WATER && (OctaveNoise_Calc(n2, (float)x, (float)z) > 12)) {
 				Gen_Blocks[index] = BLOCK_GRAVEL;
 			} else if (above == BLOCK_AIR) {
-				Gen_Blocks[index] = (y <= waterLevel && (OctaveNoise_Calc(n1, (float)x, (float)z) > 8)) ? BLOCK_SAND : BLOCK_GRASS;
+				if (biome == BIOME_DESERT ||
+					(y <= waterLevel && OctaveNoise_Calc(n1, (float)x, (float)z) > 8)) {
+					Gen_Blocks[index] = BLOCK_SAND;
+				} else {
+					Gen_Blocks[index] = BLOCK_GRASS;
+					if (biome == BIOME_TUNDRA && y < World.MaxY &&
+						Gen_Blocks[index + World.OneY] == BLOCK_AIR) {
+						Gen_Blocks[index + World.OneY] = BLOCK_SNOW;
+					}
+				}
 			}
 		}
 	}
@@ -690,6 +714,7 @@ static void NotchyGen_PlantTrees(void) {
 	int treeX, treeY, treeZ;
 	int treeHeight, index, count;
 	BlockRaw under;
+	float treeChance;
 	int i, j, k, m;
 
 	IVec3 coords[TREE_MAX_COUNT];
@@ -712,7 +737,11 @@ static void NotchyGen_PlantTrees(void) {
 				treeX += Random_Next(&rnd, 6) - Random_Next(&rnd, 6);
 				treeZ += Random_Next(&rnd, 6) - Random_Next(&rnd, 6);
 
-				if (!World_ContainsXZ(treeX, treeZ) || Random_Float(&rnd) >= 0.25f) continue;
+				if (!World_ContainsXZ(treeX, treeZ)) continue;
+				if (biomeMap[treeZ * World.Width + treeX] == BIOME_DESERT ||
+					biomeMap[treeZ * World.Width + treeX] == BIOME_TUNDRA) continue;
+				treeChance = biomeMap[treeZ * World.Width + treeX] == BIOME_FOREST ? 0.42f : 0.16f;
+				if (Random_Float(&rnd) >= treeChance) continue;
 				treeY = heightmap[treeZ * World.Width + treeX] + 1;
 				if (treeY >= World.Height) continue;
 				treeHeight = 5 + Random_Next(&rnd, 3);
@@ -735,11 +764,20 @@ static void NotchyGen_PlantTrees(void) {
 
 static cc_bool NotchyGen_Prepare(int seed) {
 	Random_Seed(&rnd, seed);
-	waterLevel = World.Height / 2;	
-	minHeight  = World.Height;
+	waterLevel = World.Height / 2;
+	minHeight = World.Height;
+	heightmap = NULL;
+	biomeMap = NULL;
 
-	heightmap  = (cc_int16*)Mem_TryAlloc(World.Width * World.Length, 2);
-	return heightmap != NULL;
+	heightmap = (cc_int16*)Mem_TryAlloc(World.Width * World.Length, 2);
+	if (!heightmap) return false;
+	biomeMap = (cc_uint8*)Mem_TryAlloc(World.Width * World.Length, 1);
+	if (!biomeMap) {
+		Mem_Free(heightmap);
+		heightmap = NULL;
+		return false;
+	}
+	return true;
 }
 
 static void NotchyGen_Generate(void) {
@@ -762,7 +800,9 @@ static void NotchyGen_Generate(void) {
 	GEN_COOP_END
 
 	Mem_Free(heightmap);
+	Mem_Free(biomeMap);
 	heightmap = NULL;
+	biomeMap = NULL;
 	gen_done  = true;
 }
 
