@@ -152,6 +152,7 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_CHESTPLATE, "Iron chestplate", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_LEGGINGS, "Iron leggings", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_BOOTS, "Iron boots", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_BED, "Bed", BLOCK_RED, true, true);
 }
 #endif
 
@@ -933,7 +934,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 27];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 47];
 	cc_uint16 dayTicks;
 	int i, itemTypes = 0, droppedCount = 0, offset = 14;
 	cc_result res;
@@ -945,7 +946,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 7;
+	data[4] = 8;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -1020,6 +1021,25 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		data[offset++] = (cc_uint8)(block & 0xFF); data[offset++] = (cc_uint8)(block >> 8);
 		data[offset++] = (cc_uint8)(durability & 0xFF); data[offset++] = (cc_uint8)(durability >> 8);
 	}
+	{
+		struct LocalPlayer* player = Entities.CurPlayer;
+		cc_uint32 bits;
+		float spawnValues[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+		if (player) {
+			spawnValues[0] = player->Spawn.x;
+			spawnValues[1] = player->Spawn.y;
+			spawnValues[2] = player->Spawn.z;
+			spawnValues[3] = player->SpawnYaw;
+			spawnValues[4] = player->SpawnPitch;
+		}
+		for (i = 0; i < 5; i++) {
+			Mem_Copy(&bits, &spawnValues[i], sizeof(bits));
+			data[offset++] = (cc_uint8)bits;
+			data[offset++] = (cc_uint8)(bits >> 8);
+			data[offset++] = (cc_uint8)(bits >> 16);
+			data[offset++] = (cc_uint8)(bits >> 24);
+		}
+	}
 
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_CreatePath(&stream, &rawPath);
@@ -1037,8 +1057,8 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 27];
-	cc_uint32 payloadSize, droppedOffset, furnaceOffset, armorOffset;
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 47];
+	cc_uint32 payloadSize, droppedOffset, furnaceOffset, armorOffset, spawnOffset;
 	int i, offset, stackSlots = 0, droppedCount = 0;
 	cc_result res;
 
@@ -1059,7 +1079,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6 && data[4] != 7) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6 && data[4] != 7 && data[4] != 8) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
@@ -1108,6 +1128,14 @@ cc_result Survival_Load(const cc_string* mapPath) {
 			return res;
 		}
 	}
+	spawnOffset = armorOffset + (data[4] >= 7 ? 16U : 0U);
+	if (data[4] >= 8) {
+		res = Stream_Read(&stream, data + spawnOffset, 20);
+		if (res) {
+			stream.Close(&stream);
+			return res;
+		}
+	}
 	res = stream.Close(&stream);
 	if (res) return res;
 
@@ -1145,6 +1173,26 @@ cc_result Survival_Load(const cc_string* mapPath) {
 				equippedArmor[i] = (BlockID)block;
 				equippedArmorDurability[i] = durability;
 			}
+		}
+	}
+	if (data[4] >= 8 && Entities.CurPlayer) {
+		float spawnValues[5];
+		for (i = 0; i < 5; i++) {
+			cc_uint32 bits = (cc_uint32)data[spawnOffset + i * 4] |
+				((cc_uint32)data[spawnOffset + i * 4 + 1] << 8) |
+				((cc_uint32)data[spawnOffset + i * 4 + 2] << 16) |
+				((cc_uint32)data[spawnOffset + i * 4 + 3] << 24);
+			Mem_Copy(&spawnValues[i], &bits, sizeof(bits));
+		}
+		if (spawnValues[0] == spawnValues[0] && spawnValues[1] == spawnValues[1] &&
+			spawnValues[2] == spawnValues[2] && spawnValues[3] == spawnValues[3] &&
+			spawnValues[4] == spawnValues[4] &&
+			World_Contains(Math_Floor(spawnValues[0]), Math_Floor(spawnValues[1]), Math_Floor(spawnValues[2]))) {
+			Entities.CurPlayer->Spawn.x = spawnValues[0];
+			Entities.CurPlayer->Spawn.y = spawnValues[1];
+			Entities.CurPlayer->Spawn.z = spawnValues[2];
+			Entities.CurPlayer->SpawnYaw = spawnValues[3];
+			Entities.CurPlayer->SpawnPitch = spawnValues[4];
 		}
 	}
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
@@ -1660,6 +1708,8 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
 		Chat_AddRaw("&a/craft wooden_hoe|stone_hoe|iron_hoe");
 		Chat_AddRaw("&a/craft iron_helmet|iron_chestplate|iron_leggings|iron_boots");
+		Chat_AddRaw("&a/craft bed &7- 3 wool + 3 planks");
+		Chat_AddRaw("&aPlace a bed and use /client sleep at night.");
 		Chat_AddRaw("&aRight-click armor from your hotbar to equip it.");
 		Chat_AddRaw("&a/craft bread &7- 3 wheat");
 		Chat_AddRaw("&aUse hoes on dirt/grass, then plant seeds on farmland.");
@@ -1698,6 +1748,8 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_COBBLE, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_hoe")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "bed")) {
+		Survival_CraftRecipe(BLOCK_WHITE, 3, BLOCK_WOOD, 3, BLOCK_ITEM_BED, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_helmet")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 5, BLOCK_AIR, 0, BLOCK_ITEM_IRON_HELMET, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_chestplate")) {
@@ -2183,6 +2235,52 @@ cc_bool Survival_AttackMob(void) {
 	return true;
 }
 
+static void SurvivalSleepCommand_Execute(const cc_string* args, int argsCount) {
+	struct LocalPlayer* player = Entities.CurPlayer;
+	int i;
+	(void)args;
+	(void)argsCount;
+
+	if (!Survival_IsActive() || !player) return;
+	if (!Survival_NearBlock(BLOCK_ITEM_BED)) {
+		Chat_AddRaw("&eYou need to be near a bed to sleep.");
+		return;
+	}
+	if (!Survival_IsNight()) {
+		Chat_AddRaw("&eYou can only sleep at night.");
+		return;
+	}
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		struct SurvivalMob* mob = &survivalMobs[i];
+		float dx, dy, dz;
+		if (!mob->active || !SurvivalMob_IsHostile(mob)) continue;
+		dx = mob->Base.Position.x - player->Base.Position.x;
+		dy = mob->Base.Position.y - player->Base.Position.y;
+		dz = mob->Base.Position.z - player->Base.Position.z;
+		if (dx * dx + dy * dy + dz * dz < 64.0f) {
+			Chat_AddRaw("&eYou cannot sleep while hostile mobs are nearby.");
+			return;
+		}
+	}
+
+	player->Spawn = player->Base.Position;
+	player->SpawnYaw = player->Base.Yaw;
+	player->SpawnPitch = player->Base.Pitch;
+	timeOfDay = 0.0f;
+	dayCycleStep = -1;
+	Survival_UpdateDayNight(0.0f);
+	Chat_AddRaw("&aYou slept. Your respawn point is now set here.");
+}
+
+static struct ChatCommand SurvivalSleepCommand = {
+	"sleep", SurvivalSleepCommand_Execute,
+	COMMAND_FLAG_SINGLEPLAYER_ONLY,
+	{
+		"&a/client sleep",
+		"&eSleep in a nearby bed at night and set your respawn point.",
+	}
+};
+
 static void Survival_OnNewMapLoaded(void) {
 	if (!Survival_IsActive()) return;
 	Survival_CropRebuild();
@@ -2288,6 +2386,7 @@ static void Survival_Init(void) {
 	Survival_ArmorReset();
 	Survival_Reset();
 	Commands_Register(&SurvivalCraftCommand);
+	Commands_Register(&SurvivalSleepCommand);
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	Game.Draw2DHooks[1] = Survival_RenderHUD;
@@ -2302,6 +2401,7 @@ static void Survival_Free(void) {
 	SurvivalMob_ClearAll();
 	SurvivalItem_ClearAll();
 	Commands_Unregister(&SurvivalCraftCommand);
+	Commands_Unregister(&SurvivalSleepCommand);
 	if (Game.Draw2DHooks[1] == Survival_RenderHUD) Game.Draw2DHooks[1] = NULL;
 }
 
