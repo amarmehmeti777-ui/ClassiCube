@@ -26,7 +26,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - A fixed 40-entity dropped-item pool; nearby same-item stacks merge, drops despawn after five minutes, and lava destroys them.
 - Tool durability is retained when a tool is dropped and collected.
 - Block placement consumes an item from the inventory.
-- Local Survival items include food, seeds, wheat, sticks, coal, ingots, crafting table, furnace, torches, hoes, pickaxes, axes, shovels, swords, four iron armor pieces and mob drops.
+- Local Survival items include food, seeds, wheat, sticks, coal, ingots, crafting table, furnace, torches, hoes, pickaxes, axes, shovels, swords, iron and gold armor, and mob drops.
 
 ### Farming
 - Dandelion flowers can drop seeds.
@@ -60,12 +60,12 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 ## Still missing compared with Minecraft Beta 1.7.3
 
 - Infinite terrain and Beta biomes; worlds are finite ClassiCube maps.
-- A real crafting-grid screen and a timed furnace with fuel, progress and output slots; crafting/smelting are currently chat commands.
-- Gold/leather/chain armor, armor rendered directly on the player model, bows/projectile combat, cows, breeding, and several other original mob systems. Beds currently use a simple block appearance rather than the two-part Beta bed model.
+- Graphical crafting-grid and furnace interfaces; recipes and furnace jobs are currently controlled through chat commands.
+- Leather/chain armor, armor rendered directly on the player model, bows/projectile combat, cows, breeding, and several other original mob systems. Beds currently use a simple block appearance rather than the two-part Beta bed model.
 - Exact Beta block/item textures and models for all added items; farmland/crops currently reuse existing Classic textures.
 - Full item physics such as water floating and a complete stack-merging system. The current drop pool is intentionally bounded for old PCs.
 - A full play-test on the target Windows 7 / Intel GMA 950 machine. CI compilation is not the same as testing the game in that environment.
 
 ## Build status
 
-The 32-bit Windows Direct3D 9 and OpenGL 1.1 clients compiled successfully in GitHub Actions for source commit `84f2917c9458d992cf6401ab425ec62f97d0e4ac`. The executables are in the `ClassiCube-Survival-Windows-32-bit` Actions artifact. The client still needs in-game testing on the target PC.
+The 32-bit Windows Direct3D 9 and OpenGL 1.1 clients compiled successfully in GitHub Actions for source commit `37f9019cbafc713d082377c3e407e3ebc9614d2e`. The executables are in the `ClassiCube-Survival-Windows-32-bit` Actions artifact. The client still needs in-game testing on the target PC.
