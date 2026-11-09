@@ -453,7 +453,8 @@ static void SurvivalItem_SpawnEx(BlockID block, int amount, Vec3 position, int d
 		struct SurvivalItem* existing = &survivalItems[i];
 		float dx, dy, dz;
 		int room, merged;
-		if (!existing->active || existing->block != block || existing->count >= SURVIVAL_INVENTORY_STACK_SIZE ||
+		if (!existing->active || existing->projectile || existing->block != block ||
+			existing->count >= SURVIVAL_INVENTORY_STACK_SIZE ||
 			Survival_ItemMaxStack(block) <= 1 || existing->durability != durability) continue;
 		dx = existing->Base.Position.x - position.x;
 		dy = existing->Base.Position.y - position.y;
