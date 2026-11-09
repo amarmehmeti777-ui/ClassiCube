@@ -824,7 +824,7 @@ void TableWidget_RecreateBlocks(struct TableWidget* w) {
 
 		for (; i < rowEnd; i++) {
 			block = Inventory.Map[i];
-			if (block > max && !(Survival_IsActive() && block >= BLOCK_ITEM_APPLE && block <= BLOCK_ITEM_BED)) continue;
+			if (block > max && !(Survival_IsActive() && block >= BLOCK_ITEM_APPLE && block <= BLOCK_ITEM_GOLD_BOOTS)) continue;
 			
 			w->blocks[w->blocksCount++] = block;
 			if (block != BLOCK_AIR) emptyRow = false;
