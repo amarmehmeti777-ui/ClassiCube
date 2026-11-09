@@ -213,7 +213,7 @@ void Survival_OnBlockPlaced(BlockID block) {
 	if (Survival_IsActive()) Survival_InventoryRemove(block, 1);
 }
 
-#define SURVIVAL_ITEM_SLOTS 32
+#define SURVIVAL_ITEM_SLOTS 40
 #define SURVIVAL_ITEM_ENTITY_BASE 16
 
 struct SurvivalItem {
@@ -297,7 +297,7 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 	if (!item->active || !Survival_IsActive() || !World.Loaded) return;
 	item->age += delta;
 	item->pickupDelay -= delta;
-	if (item->age >= 300.0f || e->Position.y < -5.0f) {
+	if (item->age >= 300.0f || e->Position.y < -5.0f || Entity_TouchesAnyLava(e)) {
 		Entities_Remove(item->entityID);
 		return;
 	}
@@ -397,6 +397,29 @@ static void SurvivalItem_ClearAll(void) {
 	for (i = 0; i < SURVIVAL_ITEM_SLOTS; i++) {
 		if (survivalItems[i].active) Entities_Remove(survivalItems[i].entityID);
 	}
+}
+
+static void Survival_DropInventory(void) {
+	int drops[BLOCK_COUNT];
+	int i;
+	Vec3 position;
+	if (!Survival_IsActive() || !Entities.CurPlayer) return;
+
+	Mem_Copy(drops, itemCounts, sizeof(drops));
+	Mem_Set(itemCounts, 0, sizeof(itemCounts));
+	Mem_Set(toolDurability, 0, sizeof(toolDurability));
+	for (i = 0; i < INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR; i++) {
+		Inventory.Table[i] = BLOCK_AIR;
+	}
+	Survival_RefreshInventoryMap();
+	Event_RaiseVoid(&UserEvents.HeldBlockChanged);
+
+	position = Entities.CurPlayer->Base.Position;
+	position.y += 0.25f;
+	for (i = 1; i < BLOCK_COUNT; i++) {
+		if (drops[i] > 0) SurvivalItem_Spawn((BlockID)i, drops[i], position);
+	}
+	Chat_AddRaw("&cYou dropped your inventory.");
 }
 
 
@@ -871,6 +894,7 @@ void Survival_Damage(int amount) {
 	if (health == 0) {
 		deathTimer = 3.0f;
 		fallActive = false;
+		Survival_DropInventory();
 		Chat_AddRaw("&cYou died! Respawning...");
 	}
 }
