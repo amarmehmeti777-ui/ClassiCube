@@ -43,7 +43,7 @@ Select food in your hotbar and right-click to eat. Pigs and chickens provide mea
 
 ## Crafting and saving
 
-Enter `/client craft help` in chat to see all recipes. Smelting/cooking commands currently consume coal immediately rather than running a timed furnace interface.
+Enter `/client craft help` in chat to see all recipes. Smelting/cooking commands now start timed furnace jobs: each item takes 10 seconds, one coal fuels up to eight jobs, and up to 16 jobs of the same output can be queued. The queue and remaining fuel are saved with the world. The furnace still has no graphical interface.
 
 Use ClassiCube's normal pause/save-level flow. Keep the companion `.survival` file beside its map file when moving a world to another computer. Crop stages and placed farmland are saved in the map; the crop's partial growth timer restarts when the map is loaded.
 
