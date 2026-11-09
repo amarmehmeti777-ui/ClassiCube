@@ -323,9 +323,26 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 
 static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 	static const cc_string blockModel = String_FromConst("block");
-	int remaining = amount;
+	int remaining = amount, i;
 
 	if (!Survival_IsActive() || block <= BLOCK_AIR || block >= BLOCK_COUNT || amount <= 0) return;
+
+	/* Merge nearby stacks before consuming another entity slot. The pool is
+	   deliberately small for low-memory singleplayer targets. */
+	for (i = 0; i < SURVIVAL_ITEM_SLOTS && remaining > 0; i++) {
+		struct SurvivalItem* existing = &survivalItems[i];
+		float dx, dy, dz;
+		int room, merged;
+		if (!existing->active || existing->block != block || existing->count >= SURVIVAL_INVENTORY_STACK_SIZE) continue;
+		dx = existing->Base.Position.x - position.x;
+		dy = existing->Base.Position.y - position.y;
+		dz = existing->Base.Position.z - position.z;
+		if (dx * dx + dy * dy + dz * dz > 1.0f) continue;
+		room = SURVIVAL_INVENTORY_STACK_SIZE - existing->count;
+		merged = min(room, remaining);
+		existing->count += merged;
+		remaining -= merged;
+	}
 	while (remaining > 0) {
 		struct SurvivalItem* item = SurvivalItem_FindFree();
 		int id, count;
@@ -361,8 +378,9 @@ static void SurvivalItem_Spawn(BlockID block, int amount, Vec3 position) {
 		item->Collisions.Entity = &item->Base;
 		item->Collisions.StepSize = 0.5f;
 
+		/* position is already the final world-space item origin. This also
+		   prevents saved drops rising by another quarter block on each reload. */
 		item->Base.Position = position;
-		item->Base.Position.y += 0.25f;
 		item->Base.prev.pos = item->Base.Position;
 		item->Base.next.pos = item->Base.Position;
 		item->Base.Yaw = (float)Random_Next(&survivalRng, 360);
@@ -544,7 +562,7 @@ void Survival_OnBlockBroken(BlockID block, int x, int y, int z) {
 	Survival_UseToolDurability(block);
 	if (drop == BLOCK_AIR) return;
 	position.x = x + 0.5f;
-	position.y = y + 0.25f;
+	position.y = y + 0.5f;
 	position.z = z + 0.5f;
 	SurvivalItem_Spawn(drop, 1, position);
 }
@@ -1350,8 +1368,11 @@ static void SurvivalMob_ClearAll(void) {
 }
 
 static void SurvivalMob_AddDrop(struct SurvivalMob* mob, BlockID block, int amount) {
+	Vec3 position;
 	if (!mob || amount <= 0) return;
-	SurvivalItem_Spawn(block, amount, mob->Base.Position);
+	position = mob->Base.Position;
+	position.y += 0.25f;
+	SurvivalItem_Spawn(block, amount, position);
 }
 
 static void SurvivalMob_Die(struct SurvivalMob* mob) {
