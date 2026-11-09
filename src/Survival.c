@@ -418,6 +418,7 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 
 	if (item->projectile) {
 		if (e->OnGround || item->Collisions.HitXMin || item->Collisions.HitXMax ||
+			item->Collisions.HitYMin || item->Collisions.HitYMax ||
 			item->Collisions.HitZMin || item->Collisions.HitZMax) {
 			SurvivalItem_EggImpact(item);
 		}
