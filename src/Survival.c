@@ -161,6 +161,11 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_SHEARS, "Shears", BLOCK_IRON, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_EGG, "Egg", BLOCK_WHITE, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_FEATHER, "Feather", BLOCK_WHITE, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_LEATHER, "Leather", BLOCK_BROWN, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_LEATHER_HELMET, "Leather cap", BLOCK_BROWN, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_LEATHER_CHESTPLATE, "Leather tunic", BLOCK_BROWN, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_LEATHER_LEGGINGS, "Leather pants", BLOCK_BROWN, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_LEATHER_BOOTS, "Leather boots", BLOCK_BROWN, false, false);
 }
 #endif
 
@@ -184,10 +189,10 @@ static cc_bool Survival_IsTool(BlockID block) {
 
 static int Survival_ArmorSlot(BlockID block) {
 	switch (block) {
-	case BLOCK_ITEM_IRON_HELMET: case BLOCK_ITEM_GOLD_HELMET: return 0;
-	case BLOCK_ITEM_IRON_CHESTPLATE: case BLOCK_ITEM_GOLD_CHESTPLATE: return 1;
-	case BLOCK_ITEM_IRON_LEGGINGS: case BLOCK_ITEM_GOLD_LEGGINGS: return 2;
-	case BLOCK_ITEM_IRON_BOOTS: case BLOCK_ITEM_GOLD_BOOTS: return 3;
+	case BLOCK_ITEM_IRON_HELMET: case BLOCK_ITEM_GOLD_HELMET: case BLOCK_ITEM_LEATHER_HELMET: return 0;
+	case BLOCK_ITEM_IRON_CHESTPLATE: case BLOCK_ITEM_GOLD_CHESTPLATE: case BLOCK_ITEM_LEATHER_CHESTPLATE: return 1;
+	case BLOCK_ITEM_IRON_LEGGINGS: case BLOCK_ITEM_GOLD_LEGGINGS: case BLOCK_ITEM_LEATHER_LEGGINGS: return 2;
+	case BLOCK_ITEM_IRON_BOOTS: case BLOCK_ITEM_GOLD_BOOTS: case BLOCK_ITEM_LEATHER_BOOTS: return 3;
 	default: return -1;
 	}
 }
@@ -206,6 +211,10 @@ static int Survival_ArmorMaxDurability(BlockID block) {
 	case BLOCK_ITEM_GOLD_CHESTPLATE: return 112;
 	case BLOCK_ITEM_GOLD_LEGGINGS: return 105;
 	case BLOCK_ITEM_GOLD_BOOTS: return 91;
+	case BLOCK_ITEM_LEATHER_HELMET: return 56;
+	case BLOCK_ITEM_LEATHER_CHESTPLATE: return 81;
+	case BLOCK_ITEM_LEATHER_LEGGINGS: return 76;
+	case BLOCK_ITEM_LEATHER_BOOTS: return 66;
 	default: return 0;
 	}
 }
@@ -1498,11 +1507,17 @@ void Survival_Damage(int amount) {
 static int Survival_ArmorPoints(void) {
 	static const int ironPoints[SURVIVAL_ARMOR_SLOTS] = { 2, 6, 5, 2 };
 	static const int goldPoints[SURVIVAL_ARMOR_SLOTS] = { 2, 5, 3, 1 };
+	static const int leatherPoints[SURVIVAL_ARMOR_SLOTS] = { 1, 3, 2, 1 };
 	int i, total = 0;
 	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
 		if (equippedArmor[i] == BLOCK_AIR || equippedArmorDurability[i] <= 0) continue;
-		total += (equippedArmor[i] >= BLOCK_ITEM_GOLD_HELMET &&
-			equippedArmor[i] <= BLOCK_ITEM_GOLD_BOOTS) ? goldPoints[i] : ironPoints[i];
+		if (equippedArmor[i] >= BLOCK_ITEM_GOLD_HELMET && equippedArmor[i] <= BLOCK_ITEM_GOLD_BOOTS) {
+			total += goldPoints[i];
+		} else if (equippedArmor[i] >= BLOCK_ITEM_LEATHER_HELMET && equippedArmor[i] <= BLOCK_ITEM_LEATHER_BOOTS) {
+			total += leatherPoints[i];
+		} else {
+			total += ironPoints[i];
+		}
 	}
 	return total;
 }
@@ -1893,6 +1908,7 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&aRight-click a sheep with shears to collect wool.");
 		Chat_AddRaw("&a/craft iron_helmet|iron_chestplate|iron_leggings|iron_boots");
 		Chat_AddRaw("&a/craft gold_helmet|gold_chestplate|gold_leggings|gold_boots");
+		Chat_AddRaw("&a/craft leather_helmet|leather_chestplate|leather_leggings|leather_boots");
 		Chat_AddRaw("&a/craft bed &7- 3 wool + 3 planks");
 		Chat_AddRaw("&aPlace a bed and use /client sleep at night.");
 		Chat_AddRaw("&aRight-click armor from your hotbar to equip it.");
@@ -1953,6 +1969,14 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_ITEM_GOLD_INGOT, 7, BLOCK_AIR, 0, BLOCK_ITEM_GOLD_LEGGINGS, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "gold_boots")) {
 		Survival_CraftRecipe(BLOCK_ITEM_GOLD_INGOT, 4, BLOCK_AIR, 0, BLOCK_ITEM_GOLD_BOOTS, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "leather_helmet")) {
+		Survival_CraftRecipe(BLOCK_ITEM_LEATHER, 5, BLOCK_AIR, 0, BLOCK_ITEM_LEATHER_HELMET, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "leather_chestplate")) {
+		Survival_CraftRecipe(BLOCK_ITEM_LEATHER, 8, BLOCK_AIR, 0, BLOCK_ITEM_LEATHER_CHESTPLATE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "leather_leggings")) {
+		Survival_CraftRecipe(BLOCK_ITEM_LEATHER, 7, BLOCK_AIR, 0, BLOCK_ITEM_LEATHER_LEGGINGS, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "leather_boots")) {
+		Survival_CraftRecipe(BLOCK_ITEM_LEATHER, 4, BLOCK_AIR, 0, BLOCK_ITEM_LEATHER_BOOTS, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_pickaxe")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_axe")) {
@@ -1998,6 +2022,7 @@ static struct ChatCommand SurvivalCraftCommand = {
 #define SURVIVAL_MOB_SKELETON 4
 #define SURVIVAL_MOB_CREEPER 5
 #define SURVIVAL_MOB_SPIDER 6
+#define SURVIVAL_MOB_COW 7
 
 struct SurvivalMob {
 	struct Entity Base;
@@ -2026,7 +2051,7 @@ static struct SurvivalMob survivalMobs[SURVIVAL_MOB_SLOTS];
 static void SurvivalMob_Tick(struct Entity* e, float delta);
 
 static cc_bool SurvivalMob_IsHostile(const struct SurvivalMob* mob) {
-	return mob->type >= SURVIVAL_MOB_ZOMBIE;
+	return mob->type >= SURVIVAL_MOB_ZOMBIE && mob->type <= SURVIVAL_MOB_SPIDER;
 }
 
 static PackedCol SurvivalMob_GetColor(struct Entity* e) {
@@ -2096,13 +2121,13 @@ static int SurvivalMob_Count(cc_bool hostileOnly) {
 
 static struct SurvivalMob* SurvivalMob_Spawn(int type, float x, float z) {
 	static const char* const modelNames[] = {
-		"pig", "chicken", "sheep", "zombie", "skeleton", "creeper", "spider"
+		"pig", "chicken", "sheep", "zombie", "skeleton", "creeper", "spider", "cow"
 	};
 	struct SurvivalMob* mob = SurvivalMob_FindFree();
 	cc_string modelName;
 	int id;
 
-	if (!mob || type < SURVIVAL_MOB_PIG || type > SURVIVAL_MOB_SPIDER) return NULL;
+	if (!mob || type < SURVIVAL_MOB_PIG || type > SURVIVAL_MOB_COW) return NULL;
 	id = SurvivalMob_FindID(mob);
 	if (id < 0) return NULL;
 
@@ -2171,6 +2196,10 @@ static void SurvivalMob_Die(struct SurvivalMob* mob) {
 	switch (mob->type) {
 	case SURVIVAL_MOB_PIG:
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_PORK, 1 + Random_Next(&survivalRng, 3));
+		break;
+	case SURVIVAL_MOB_COW:
+		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_BEEF, 1 + Random_Next(&survivalRng, 3));
+		if (Random_Next(&survivalRng, 2) == 0) SurvivalMob_AddDrop(mob, BLOCK_ITEM_LEATHER, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_CHICKEN:
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
@@ -2442,6 +2471,8 @@ static void Survival_SpawnInitialAnimals(void) {
 	SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, centre.x + 5.0f, centre.z - 3.0f);
 	SurvivalMob_Spawn(SURVIVAL_MOB_CHICKEN, centre.x - 5.0f, centre.z + 3.0f);
 	SurvivalMob_Spawn(SURVIVAL_MOB_SHEEP, centre.x + 2.0f, centre.z - 5.0f);
+	SurvivalMob_Spawn(SURVIVAL_MOB_COW, centre.x - 2.0f, centre.z + 6.0f);
+	SurvivalMob_Spawn(SURVIVAL_MOB_COW, centre.x + 7.0f, centre.z + 5.0f);
 }
 
 static void Survival_SpawnNightMob(void) {
