@@ -58,6 +58,9 @@ struct SurvivalCrop {
 };
 static struct SurvivalCrop survivalCrops[SURVIVAL_CROP_SLOTS];
 static void Survival_UseToolDurability(BlockID block);
+static void Survival_FurnaceReset(void);
+static void Survival_FurnaceTick(float delta);
+static cc_bool Survival_FurnaceOutputValid(BlockID output);
 static void Survival_CropTick(float delta);
 static void Survival_CropRebuild(void);
 
