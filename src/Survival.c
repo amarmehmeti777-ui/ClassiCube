@@ -36,6 +36,9 @@ static struct ScheduledTask2 survivalTask;
 static float hostileSpawnTimer;
 static int itemCounts[BLOCK_COUNT];
 static int toolDurability[BLOCK_COUNT];
+#define SURVIVAL_ARMOR_SLOTS 4
+static BlockID equippedArmor[SURVIVAL_ARMOR_SLOTS];
+static int equippedArmorDurability[SURVIVAL_ARMOR_SLOTS];
 static BlockID furnaceOutput;
 static int furnaceQueued;
 static float furnaceProgress, furnaceFuelSeconds;
@@ -58,6 +61,7 @@ struct SurvivalCrop {
 };
 static struct SurvivalCrop survivalCrops[SURVIVAL_CROP_SLOTS];
 static void Survival_UseToolDurability(BlockID block);
+static int Survival_ToolMaxDurability(BlockID block);
 static void Survival_FurnaceReset(void);
 static void Survival_FurnaceTick(float delta);
 static cc_bool Survival_FurnaceOutputValid(BlockID output);
@@ -144,6 +148,10 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_WOOD_HOE, "Wooden hoe", BLOCK_WOOD, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_STONE_HOE, "Stone hoe", BLOCK_STONE, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_HOE, "Iron hoe", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_HELMET, "Iron helmet", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_CHESTPLATE, "Iron chestplate", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_LEGGINGS, "Iron leggings", BLOCK_IRON, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_IRON_BOOTS, "Iron boots", BLOCK_IRON, false, false);
 }
 #endif
 
@@ -164,6 +172,46 @@ static cc_bool Survival_IsTool(BlockID block) {
 		block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE;
 }
 
+static int Survival_ArmorSlot(BlockID block) {
+	switch (block) {
+	case BLOCK_ITEM_IRON_HELMET: return 0;
+	case BLOCK_ITEM_IRON_CHESTPLATE: return 1;
+	case BLOCK_ITEM_IRON_LEGGINGS: return 2;
+	case BLOCK_ITEM_IRON_BOOTS: return 3;
+	default: return -1;
+	}
+}
+
+static cc_bool Survival_IsArmor(BlockID block) {
+	return Survival_ArmorSlot(block) >= 0;
+}
+
+static int Survival_ArmorMaxDurability(BlockID block) {
+	switch (block) {
+	case BLOCK_ITEM_IRON_HELMET: return 165;
+	case BLOCK_ITEM_IRON_CHESTPLATE: return 240;
+	case BLOCK_ITEM_IRON_LEGGINGS: return 225;
+	case BLOCK_ITEM_IRON_BOOTS: return 195;
+	default: return 0;
+	}
+}
+
+static void Survival_ArmorReset(void) {
+	int i;
+	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
+		equippedArmor[i] = BLOCK_AIR;
+		equippedArmorDurability[i] = 0;
+	}
+}
+
+static cc_bool Survival_IsDurableItem(BlockID block) {
+	return Survival_IsTool(block) || Survival_IsArmor(block);
+}
+
+static int Survival_ItemDurabilityMax(BlockID block) {
+	return Survival_IsArmor(block) ? Survival_ArmorMaxDurability(block) : Survival_ToolMaxDurability(block);
+}
+
 static int Survival_ToolMaxDurability(BlockID block) {
 	switch (block) {
 	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: case BLOCK_ITEM_WOOD_SWORD: case BLOCK_ITEM_WOOD_HOE: return 60;
@@ -174,7 +222,7 @@ static int Survival_ToolMaxDurability(BlockID block) {
 }
 
 static int Survival_ItemMaxStack(BlockID block) {
-	return Survival_IsTool(block) ? 1 : SURVIVAL_INVENTORY_STACK_SIZE;
+	return Survival_IsDurableItem(block) ? 1 : SURVIVAL_INVENTORY_STACK_SIZE;
 }
 
 static int Survival_UsedInventoryStacks(void) {
@@ -211,7 +259,7 @@ int Survival_InventoryAdd(BlockID block, int amount) {
 	if (amount <= 0) return 0;
 
 	itemCounts[block] += amount;
-	if (Survival_IsTool(block)) toolDurability[block] = Survival_ToolMaxDurability(block);
+	if (Survival_IsDurableItem(block)) toolDurability[block] = Survival_ItemDurabilityMax(block);
 	Survival_RefreshInventoryMap();
 	for (i = 0; i < INVENTORY_BLOCKS_PER_HOTBAR; i++) {
 		if (Inventory_Get(i) == block) return amount;
@@ -360,7 +408,7 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 		BlockID block = item->block;
 		int durability = item->durability;
 		added = Survival_InventoryAdd(block, item->count);
-		if (added > 0 && Survival_IsTool(block) && durability > 0) toolDurability[block] = durability;
+		if (added > 0 && Survival_IsDurableItem(block) && durability > 0) toolDurability[block] = durability;
 	}
 	item->count -= added;
 	if (item->count <= 0) Entities_Remove(item->entityID);
@@ -394,7 +442,7 @@ static void SurvivalItem_SpawnEx(BlockID block, int amount, Vec3 position, int d
 		int id, count;
 		if (!item) {
 			int added = Survival_InventoryAdd(block, remaining);
-			if (added > 0 && Survival_IsTool(block) && durability > 0) toolDurability[block] = durability;
+			if (added > 0 && Survival_IsDurableItem(block) && durability > 0) toolDurability[block] = durability;
 			if (added < remaining) Chat_AddRaw("&eThere is no room for more dropped items.");
 			return;
 		}
@@ -473,10 +521,16 @@ static void Survival_DropInventory(void) {
 	for (i = 1; i < BLOCK_COUNT; i++) {
 		if (drops[i] > 0) {
 			SurvivalItem_SpawnEx((BlockID)i, drops[i], position,
-				Survival_IsTool((BlockID)i) ? dropDurability[i] : 0);
+				Survival_IsDurableItem((BlockID)i) ? dropDurability[i] : 0);
 		}
 	}
-	Chat_AddRaw("&cYou dropped your inventory.");
+	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
+		if (equippedArmor[i] == BLOCK_AIR) continue;
+		SurvivalItem_SpawnEx(equippedArmor[i], 1, position, equippedArmorDurability[i]);
+		equippedArmor[i] = BLOCK_AIR;
+		equippedArmorDurability[i] = 0;
+	}
+	Chat_AddRaw("&cYou dropped your inventory and armor.");
 }
 
 
@@ -621,10 +675,39 @@ static cc_bool Survival_UseHoe(BlockID hoe) {
 
 static void Survival_UseToolDurability(BlockID block);
 
+static cc_bool Survival_EquipArmor(BlockID block) {
+	int slot = Survival_ArmorSlot(block);
+	int incomingDurability, oldDurability;
+	BlockID old;
+	if (slot < 0) return false;
+	if (Survival_GetItemCount(block) <= 0) {
+		Chat_AddRaw("&eYou don't have that armor piece.");
+		return true;
+	}
+	incomingDurability = toolDurability[block] > 0 ? toolDurability[block] : Survival_ArmorMaxDurability(block);
+	old = equippedArmor[slot];
+	oldDurability = equippedArmorDurability[slot];
+	if (Survival_InventoryRemove(block, 1) != 1) return true;
+	if (old != BLOCK_AIR) {
+		if (Survival_InventoryAdd(old, 1) != 1) {
+			Survival_InventoryAdd(block, 1);
+			toolDurability[block] = incomingDurability;
+			Chat_AddRaw("&eMake room in your inventory before swapping armor.");
+			return true;
+		}
+		toolDurability[old] = oldDurability;
+	}
+	equippedArmor[slot] = block;
+	equippedArmorDurability[slot] = incomingDurability;
+	Chat_AddRaw("&aArmor equipped.");
+	return true;
+}
+
 cc_bool Survival_UseItem(BlockID block) {
 	int points = 0;
 	float sat = 0.0f;
 	if (!Survival_IsActive()) return false;
+	if (Survival_IsArmor(block)) return Survival_EquipArmor(block);
 	if (block == BLOCK_ITEM_SEEDS) return Survival_PlantSeeds();
 	if (block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE) return Survival_UseHoe(block);
 
@@ -818,6 +901,7 @@ static void Survival_OnNewMap(void) {
 	SurvivalItem_ClearAll();
 	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
+	Survival_ArmorReset();
 	Mem_Set(survivalCrops, 0, sizeof(survivalCrops));
 	Survival_FurnaceReset();
 	timeOfDay = 0.0f;
@@ -849,7 +933,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 11];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 27];
 	cc_uint16 dayTicks;
 	int i, itemTypes = 0, droppedCount = 0, offset = 14;
 	cc_result res;
@@ -861,7 +945,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 6;
+	data[4] = 7;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -930,6 +1014,12 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		data[offset++] = (cc_uint8)bits; data[offset++] = (cc_uint8)(bits >> 8);
 		data[offset++] = (cc_uint8)(bits >> 16); data[offset++] = (cc_uint8)(bits >> 24);
 	}
+	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
+		cc_uint16 block = (cc_uint16)equippedArmor[i];
+		cc_uint16 durability = (cc_uint16)equippedArmorDurability[i];
+		data[offset++] = (cc_uint8)(block & 0xFF); data[offset++] = (cc_uint8)(block >> 8);
+		data[offset++] = (cc_uint8)(durability & 0xFF); data[offset++] = (cc_uint8)(durability >> 8);
+	}
 
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_CreatePath(&stream, &rawPath);
@@ -947,8 +1037,8 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 11];
-	cc_uint32 payloadSize, droppedOffset, furnaceOffset;
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 27];
+	cc_uint32 payloadSize, droppedOffset, furnaceOffset, armorOffset;
 	int i, offset, stackSlots = 0, droppedCount = 0;
 	cc_result res;
 
@@ -969,7 +1059,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6 && data[4] != 7) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
@@ -1010,10 +1100,19 @@ cc_result Survival_Load(const cc_string* mapPath) {
 			return res;
 		}
 	}
+	armorOffset = furnaceOffset + (data[4] >= 6 ? 11U : 0U);
+	if (data[4] >= 7) {
+		res = Stream_Read(&stream, data + armorOffset, 16);
+		if (res) {
+			stream.Close(&stream);
+			return res;
+		}
+	}
 	res = stream.Close(&stream);
 	if (res) return res;
 
 	Survival_FurnaceReset();
+	Survival_ArmorReset();
 	if (data[4] >= 6) {
 		cc_uint32 bits;
 		cc_uint16 savedOutput;
@@ -1035,6 +1134,19 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		}
 	}
 
+	if (data[4] >= 7) {
+		for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
+			cc_uint16 block = (cc_uint16)(data[armorOffset + i * 4] |
+				((cc_uint16)data[armorOffset + i * 4 + 1] << 8));
+			cc_uint16 durability = (cc_uint16)(data[armorOffset + i * 4 + 2] |
+				((cc_uint16)data[armorOffset + i * 4 + 3] << 8));
+			if (block < BLOCK_COUNT && Survival_ArmorSlot((BlockID)block) == i &&
+				durability > 0 && durability <= Survival_ArmorMaxDurability((BlockID)block)) {
+				equippedArmor[i] = (BlockID)block;
+				equippedArmorDurability[i] = durability;
+			}
+		}
+	}
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
 	Mem_Set(toolDurability, 0, sizeof(toolDurability));
 	health = min((int)data[5], SURVIVAL_MAX_HEALTH);
@@ -1064,8 +1176,8 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		offset += data[4] >= 3 ? 6 : 4;
 		if (block == BLOCK_AIR || block >= BLOCK_COUNT || amount == 0) continue;
 		itemCounts[block] = min((int)amount, SURVIVAL_INVENTORY_SLOTS * Survival_ItemMaxStack((BlockID)block));
-		if (Survival_IsTool((BlockID)block)) {
-			int maxDurability = Survival_ToolMaxDurability((BlockID)block);
+		if (Survival_IsDurableItem((BlockID)block)) {
+			int maxDurability = Survival_ItemDurabilityMax((BlockID)block);
 			toolDurability[block] = data[4] >= 3 ? min((int)durability, maxDurability) : maxDurability;
 			if (toolDurability[block] <= 0) {
 				itemCounts[block] = 0;
@@ -1154,6 +1266,32 @@ void Survival_Damage(int amount) {
 		Survival_DropInventory();
 		Chat_AddRaw("&cYou died! Respawning...");
 	}
+}
+
+static int Survival_ArmorPoints(void) {
+	static const int points[SURVIVAL_ARMOR_SLOTS] = { 2, 6, 5, 2 };
+	int i, total = 0;
+	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
+		if (equippedArmor[i] != BLOCK_AIR && equippedArmorDurability[i] > 0) total += points[i];
+	}
+	return total;
+}
+
+static void Survival_DamageWithArmor(int amount) {
+	int reduction, damage, i;
+	if (amount <= 0) return;
+	reduction = min(80, Survival_ArmorPoints() * 4);
+	damage = max(1, (amount * (100 - reduction) + 99) / 100);
+	for (i = 0; i < SURVIVAL_ARMOR_SLOTS; i++) {
+		if (equippedArmor[i] == BLOCK_AIR || equippedArmorDurability[i] <= 0) continue;
+		equippedArmorDurability[i]--;
+		if (equippedArmorDurability[i] <= 0) {
+			equippedArmor[i] = BLOCK_AIR;
+			equippedArmorDurability[i] = 0;
+			Chat_AddRaw("&cAn armor piece broke.");
+		}
+	}
+	Survival_Damage(damage);
 }
 
 void Survival_Heal(int amount) {
@@ -1521,6 +1659,8 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel|iron_shovel");
 		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
 		Chat_AddRaw("&a/craft wooden_hoe|stone_hoe|iron_hoe");
+		Chat_AddRaw("&a/craft iron_helmet|iron_chestplate|iron_leggings|iron_boots");
+		Chat_AddRaw("&aRight-click armor from your hotbar to equip it.");
 		Chat_AddRaw("&a/craft bread &7- 3 wheat");
 		Chat_AddRaw("&aUse hoes on dirt/grass, then plant seeds on farmland.");
 		Chat_AddRaw("&a/craft smelt_iron|smelt_gold|cook_pork|cook_beef|cook_chicken");
@@ -1558,6 +1698,14 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_COBBLE, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_STONE_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_hoe")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_helmet")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 5, BLOCK_AIR, 0, BLOCK_ITEM_IRON_HELMET, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_chestplate")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 8, BLOCK_AIR, 0, BLOCK_ITEM_IRON_CHESTPLATE, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_leggings")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 7, BLOCK_AIR, 0, BLOCK_ITEM_IRON_LEGGINGS, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "iron_boots")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 4, BLOCK_AIR, 0, BLOCK_ITEM_IRON_BOOTS, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_pickaxe")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 3, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_PICKAXE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_axe")) {
@@ -1848,7 +1996,7 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 		distance = Math_SqrtF(dx * dx + dz * dz);
 		if (distance < 1.35f) {
 			if (mob->attackTimer <= 0.0f && !Survival_IsDead()) {
-				Survival_Damage(mob->type == SURVIVAL_MOB_CREEPER ? 4 : 2);
+				Survival_DamageWithArmor(mob->type == SURVIVAL_MOB_CREEPER ? 4 : 2);
 				mob->attackTimer = 1.25f;
 			}
 			dx = dz = 0.0f;
@@ -2020,6 +2168,16 @@ static void Survival_DrawAirBubble(int x, int y) {
 	Survival_DrawPixelMask(x, y, bubble, 4, 4, PackedCol_Make(45, 120, 200, 255), 4);
 }
 
+static void Survival_DrawArmorIcon(int x, int y, int points) {
+	static const cc_uint8 outer[7] = { 0x18, 0x7E, 0xFF, 0x7E, 0x3C, 0x24, 0x24 };
+	static const cc_uint8 inner[5] = { 0x18, 0x3C, 0x3C, 0x18, 0x18 };
+	PackedCol border = PackedCol_Make(12, 18, 28, 255);
+	PackedCol empty = PackedCol_Make(55, 66, 78, 255);
+	PackedCol full = PackedCol_Make(190, 205, 220, 255);
+	Survival_DrawPixelMask(x, y, outer, 8, 7, border, 8);
+	Survival_DrawPixelMask(x + 2, y + 2, inner, 4, 5, points > 0 ? full : empty, points == 1 ? 2 : 4);
+}
+
 static void Survival_RenderHUD(float delta) {
 	int i, y, foodX;
 	(void)delta;
@@ -2027,7 +2185,11 @@ static void Survival_RenderHUD(float delta) {
 	y = Game.Height - 54;
 	if (y < 4) y = 4;
 
-	/* Minecraft-style 10-heart health row and 10-piece hunger row. */
+	/* Minecraft-style armor, health and hunger rows. */
+	for (i = 0; i < 10; i++) {
+		int armor = Survival_ArmorPoints() - i * 2;
+		Survival_DrawArmorIcon(12 + i * 18, y - 14, max(0, min(2, armor)));
+	}
 	for (i = 0; i < 10; i++) {
 		Survival_DrawHeart(12 + i * 18, y, max(0, min(2, health - i * 2)));
 	}
@@ -2055,12 +2217,14 @@ static void Survival_ComponentReset(void) {
 	SurvivalMob_ClearAll();
 	SurvivalItem_ClearAll();
 	Survival_FurnaceReset();
+	Survival_ArmorReset();
 	Survival_Reset();
 }
 
 static void Survival_Init(void) {
 	Random_Seed(&survivalRng, (int)Stopwatch_Measure());
 	Survival_FurnaceReset();
+	Survival_ArmorReset();
 	Survival_Reset();
 	Commands_Register(&SurvivalCraftCommand);
 	timeOfDay = 0.0f;
