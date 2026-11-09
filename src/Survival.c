@@ -1066,12 +1066,9 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	if ((res = Survival_MakeSidecarPath(&path, pathBuffer, mapPath))) return res;
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_OpenPath(&stream, &rawPath);
-	/* Older maps have no companion file; keep their fresh Survival state. */
-	if (res) {
-		Survival_OnNewMap();
-		Survival_SpawnInitialAnimals();
-		return 0;
-	}
+	/* Older maps have no companion file. Map_LoadFrom already ran the
+	   new-map and map-loaded hooks, so keep that freshly initialized state. */
+	if (res) return 0;
 
 	res = Stream_Read(&stream, data, 12);
 	if (res) {
