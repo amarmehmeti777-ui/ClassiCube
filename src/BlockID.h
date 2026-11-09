@@ -143,6 +143,7 @@ enum BLOCKID {
 	BLOCK_ITEM_SHEARS         = 123,
 	BLOCK_ITEM_EGG            = 124,
 	BLOCK_ITEM_FEATHER        = 125,
+	BLOCK_ITEM_LEATHER        = 126,
 
 
 
