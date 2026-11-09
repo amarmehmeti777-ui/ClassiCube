@@ -587,6 +587,15 @@ static cc_bool Survival_PlantSeeds(void) {
 	return true;
 }
 
+static void Survival_ConsumeHoeDurability(BlockID hoe) {
+	if (toolDurability[hoe] <= 0) return;
+	toolDurability[hoe]--;
+	if (toolDurability[hoe] <= 0) {
+		Chat_AddRaw("&cYour hoe broke.");
+		Survival_InventoryRemove(hoe, 1);
+	}
+}
+
 static cc_bool Survival_UseHoe(BlockID hoe) {
 	IVec3 pos, above;
 	BlockID old;
@@ -600,8 +609,7 @@ static cc_bool Survival_UseHoe(BlockID hoe) {
 
 	Game_ChangeBlock(pos.x, pos.y, pos.z, BLOCK_ITEM_FARMLAND);
 	Event_RaiseBlock(&UserEvents.BlockChanged, pos, old, BLOCK_ITEM_FARMLAND);
-	Survival_UseToolDurability(old);
-	(void)hoe;
+	Survival_ConsumeHoeDurability(hoe);
 	return true;
 }
 
@@ -731,8 +739,7 @@ static void Survival_UseToolDurability(BlockID block) {
 		usesTool = held == BLOCK_ITEM_WOOD_AXE || held == BLOCK_ITEM_STONE_AXE || held == BLOCK_ITEM_IRON_AXE;
 		break;
 	case BLOCK_DIRT: case BLOCK_GRASS:
-		usesTool = held == BLOCK_ITEM_WOOD_HOE || held == BLOCK_ITEM_STONE_HOE || held == BLOCK_ITEM_IRON_HOE ||
-			held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL;
+		usesTool = held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL;
 		break;
 	case BLOCK_SAND: case BLOCK_GRAVEL: case BLOCK_SNOW:
 		usesTool = held == BLOCK_ITEM_WOOD_SHOVEL || held == BLOCK_ITEM_STONE_SHOVEL || held == BLOCK_ITEM_IRON_SHOVEL;
