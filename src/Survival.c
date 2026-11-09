@@ -62,6 +62,7 @@ struct SurvivalCrop {
 static struct SurvivalCrop survivalCrops[SURVIVAL_CROP_SLOTS];
 static void Survival_UseToolDurability(BlockID block);
 static int Survival_ToolMaxDurability(BlockID block);
+static cc_bool Survival_ShearNearestSheep(void);
 static void Survival_FurnaceReset(void);
 static void Survival_FurnaceTick(float delta);
 static cc_bool Survival_FurnaceOutputValid(BlockID output);
@@ -157,6 +158,7 @@ static void Survival_DefineVirtualItems(void) {
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_CHESTPLATE, "Gold chestplate", BLOCK_GOLD, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_LEGGINGS, "Gold leggings", BLOCK_GOLD, false, false);
 	Survival_DefineVirtualItem(BLOCK_ITEM_GOLD_BOOTS, "Gold boots", BLOCK_GOLD, false, false);
+	Survival_DefineVirtualItem(BLOCK_ITEM_SHEARS, "Shears", BLOCK_IRON, false, false);
 }
 #endif
 
@@ -174,7 +176,8 @@ static cc_bool Survival_IsTool(BlockID block) {
 		block == BLOCK_ITEM_WOOD_AXE || block == BLOCK_ITEM_STONE_AXE || block == BLOCK_ITEM_IRON_AXE ||
 		block == BLOCK_ITEM_WOOD_SHOVEL || block == BLOCK_ITEM_STONE_SHOVEL || block == BLOCK_ITEM_IRON_SHOVEL ||
 		block == BLOCK_ITEM_WOOD_SWORD || block == BLOCK_ITEM_STONE_SWORD || block == BLOCK_ITEM_IRON_SWORD ||
-		block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE;
+		block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE ||
+		block == BLOCK_ITEM_SHEARS;
 }
 
 static int Survival_ArmorSlot(BlockID block) {
@@ -226,6 +229,7 @@ static int Survival_ToolMaxDurability(BlockID block) {
 	case BLOCK_ITEM_WOOD_PICKAXE: case BLOCK_ITEM_WOOD_AXE: case BLOCK_ITEM_WOOD_SHOVEL: case BLOCK_ITEM_WOOD_SWORD: case BLOCK_ITEM_WOOD_HOE: return 60;
 	case BLOCK_ITEM_STONE_PICKAXE: case BLOCK_ITEM_STONE_AXE: case BLOCK_ITEM_STONE_SHOVEL: case BLOCK_ITEM_STONE_SWORD: case BLOCK_ITEM_STONE_HOE: return 132;
 	case BLOCK_ITEM_IRON_PICKAXE: case BLOCK_ITEM_IRON_AXE: case BLOCK_ITEM_IRON_SHOVEL: case BLOCK_ITEM_IRON_SWORD: case BLOCK_ITEM_IRON_HOE: return 251;
+	case BLOCK_ITEM_SHEARS: return 238;
 	default: return 0;
 	}
 }
@@ -726,6 +730,7 @@ cc_bool Survival_UseItem(BlockID block) {
 	float sat = 0.0f;
 	if (!Survival_IsActive()) return false;
 	if (Survival_IsArmor(block)) return Survival_EquipArmor(block);
+	if (block == BLOCK_ITEM_SHEARS) return Survival_ShearNearestSheep();
 	if (block == BLOCK_ITEM_SEEDS) return Survival_PlantSeeds();
 	if (block == BLOCK_ITEM_WOOD_HOE || block == BLOCK_ITEM_STONE_HOE || block == BLOCK_ITEM_IRON_HOE) return Survival_UseHoe(block);
 
@@ -1805,6 +1810,8 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft wooden_shovel|stone_shovel|iron_shovel");
 		Chat_AddRaw("&a/craft wooden_sword|stone_sword|iron_sword");
 		Chat_AddRaw("&a/craft wooden_hoe|stone_hoe|iron_hoe");
+		Chat_AddRaw("&a/craft shears &7- 2 iron ingots");
+		Chat_AddRaw("&aRight-click a sheep with shears to collect wool.");
 		Chat_AddRaw("&a/craft iron_helmet|iron_chestplate|iron_leggings|iron_boots");
 		Chat_AddRaw("&a/craft gold_helmet|gold_chestplate|gold_leggings|gold_boots");
 		Chat_AddRaw("&a/craft bed &7- 3 wool + 3 planks");
@@ -1849,6 +1856,8 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_ITEM_STICK, 2, BLOCK_ITEM_IRON_HOE, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "bed")) {
 		Survival_CraftRecipe(BLOCK_WHITE, 3, BLOCK_WOOD, 3, BLOCK_ITEM_BED, 1, BLOCK_ITEM_CRAFTING_TABLE);
+	} else if (String_CaselessEqualsConst(recipe, "shears")) {
+		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_AIR, 0, BLOCK_ITEM_SHEARS, 1, BLOCK_AIR);
 	} else if (String_CaselessEqualsConst(recipe, "iron_helmet")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 5, BLOCK_AIR, 0, BLOCK_ITEM_IRON_HELMET, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "iron_chestplate")) {
@@ -1927,6 +1936,8 @@ struct SurvivalMob {
 	float hurtTimer;
 	float burnTimer;
 	float fuseTimer;
+	float grazeTimer;
+	cc_bool sheared;
 	cc_bool exploded;
 	cc_bool active;
 };
@@ -2075,7 +2086,7 @@ static void SurvivalMob_Die(struct SurvivalMob* mob) {
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_RAW_CHICKEN, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_SHEEP:
-		SurvivalMob_AddDrop(mob, BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
+		if (!mob->sheared) SurvivalMob_AddDrop(mob, BLOCK_WHITE, 1 + Random_Next(&survivalRng, 2));
 		break;
 	case SURVIVAL_MOB_ZOMBIE:
 		SurvivalMob_AddDrop(mob, BLOCK_ITEM_ROTTEN_FLESH, 1 + Random_Next(&survivalRng, 2));
@@ -2094,6 +2105,46 @@ static void SurvivalMob_Die(struct SurvivalMob* mob) {
 		break;
 	}
 	Entities_Remove(mob->entityID);
+}
+
+static cc_bool Survival_ShearNearestSheep(void) {
+	struct SurvivalMob* nearest = NULL;
+	float nearestDistanceSq = 4.5f * 4.5f;
+	int i, durability;
+	BlockID held = Inventory_SelectedBlock;
+	Vec3 position;
+
+	for (i = 0; i < SURVIVAL_MOB_SLOTS; i++) {
+		struct SurvivalMob* mob = &survivalMobs[i];
+		float dx, dy, dz, distanceSq;
+		if (!mob->active || mob->type != SURVIVAL_MOB_SHEEP || mob->sheared) continue;
+		dx = mob->Base.Position.x - Entities.CurPlayer->Base.Position.x;
+		dy = mob->Base.Position.y - Entities.CurPlayer->Base.Position.y;
+		dz = mob->Base.Position.z - Entities.CurPlayer->Base.Position.z;
+		distanceSq = dx * dx + dy * dy + dz * dz;
+		if (distanceSq < nearestDistanceSq) {
+			nearestDistanceSq = distanceSq;
+			nearest = mob;
+		}
+	}
+	if (!nearest) return false;
+
+	nearest->sheared = true;
+	nearest->grazeTimer = 0.0f;
+	position = nearest->Base.Position;
+	position.y += 0.25f;
+	SurvivalItem_Spawn(BLOCK_WHITE, 1 + Random_Next(&survivalRng, 3), position);
+
+	durability = toolDurability[held];
+	if (durability > 0) {
+		toolDurability[held] = --durability;
+		if (durability <= 0) {
+			Chat_AddRaw("&cYour shears broke.");
+			Survival_InventoryRemove(held, 1);
+		}
+	}
+	Chat_AddRaw("&aSheep sheared. It will regrow wool after grazing.");
+	return true;
 }
 
 static void SurvivalMob_SetWanderTarget(struct SurvivalMob* mob) {
@@ -2253,6 +2304,25 @@ static void SurvivalMob_Tick(struct Entity* e, float delta) {
 	e->next.pos = e->Position;
 	AnimatedComp_Update(e, oldPos, e->Position, delta);
 	SoundsComp_Tick(&mob->Sounds, wasOnGround);
+
+	if (mob->type == SURVIVAL_MOB_SHEEP && mob->sheared && e->OnGround) {
+		int gx = Math_Floor(e->Position.x);
+		int gy = Math_Floor(e->Position.y - 0.1f);
+		int gz = Math_Floor(e->Position.z);
+		if (World_Contains(gx, gy, gz) && World_GetBlock(gx, gy, gz) == BLOCK_GRASS) {
+			mob->grazeTimer += delta;
+			if (mob->grazeTimer >= 4.0f) {
+				IVec3 grassPos;
+				grassPos.x = gx; grassPos.y = gy; grassPos.z = gz;
+				Game_ChangeBlock(gx, gy, gz, BLOCK_DIRT);
+				Event_RaiseBlock(&UserEvents.BlockChanged, grassPos, BLOCK_GRASS, BLOCK_DIRT);
+				mob->sheared = false;
+				mob->grazeTimer = 0.0f;
+			}
+		} else {
+			mob->grazeTimer = 0.0f;
+		}
+	}
 
 	if (e->Position.y < 0.0f) SurvivalMob_Die(mob);
 }
