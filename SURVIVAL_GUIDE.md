@@ -37,6 +37,10 @@ Food can be eaten with right-click even when you are looking at empty air.
 7. Break mature wheat to collect wheat and more seeds.
 8. Enter `/client craft bread` near a crafting table to turn three wheat into bread.
 
+## Armor, food, combat and death
+
+Craft iron armor with `/client craft iron_helmet`, `/client craft iron_chestplate`, `/client craft iron_leggings` and `/client craft iron_boots` near a crafting table. Select each piece in the hotbar and right-click to equip it. The armor row appears above the hearts. Armor reduces damage from hostile mobs and wears down when hit. If you die, equipped armor drops with your other inventory items.
+
 ## Food, combat and death
 
 Select food in your hotbar and right-click to eat. Pigs and chickens provide meat; sheep provide wool. Hostile mobs appear at night. Zombies and skeletons burn in direct daylight unless sheltered. If you die, your inventory drops at the death location; return after respawning to collect it. Lava destroys dropped items.
