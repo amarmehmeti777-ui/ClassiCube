@@ -1573,37 +1573,63 @@ static void Survival_OnNewMapLoaded(void) {
 	Chat_AddRaw("&aSurvival Mode enabled. Use /client craft help for recipes.");
 }
 
-static void Survival_DrawMeter(int x, int y, int value, PackedCol fill) {
-	int i, amount;
-	PackedCol empty = PackedCol_Make(45, 45, 45, 230);
-	PackedCol border = PackedCol_Make(0, 0, 0, 190);
-	Gfx_Draw2DFlat(x - 2, y - 2, 102, 11, border);
-	for (i = 0; i < 10; i++) {
-		amount = value - i * 2;
-		if (amount < 0) amount = 0;
-		if (amount > 2) amount = 2;
-		Gfx_Draw2DFlat(x + i * 10, y, 8, 7, empty);
-		if (amount == 2) Gfx_Draw2DFlat(x + i * 10, y, 8, 7, fill);
-		else if (amount == 1) Gfx_Draw2DFlat(x + i * 10, y, 4, 7, fill);
+static void Survival_DrawPixelMask(int x, int y, const cc_uint8* rows, int width, int height, PackedCol col, int maxColumns) {
+	int row, column;
+	if (maxColumns < 0 || maxColumns > width) maxColumns = width;
+	for (row = 0; row < height; row++) {
+		for (column = 0; column < maxColumns; column++) {
+			if (rows[row] & (1 << (width - 1 - column))) {
+				Gfx_Draw2DFlat(x + column * 2, y + row * 2, 2, 2, col);
+			}
+		}
 	}
 }
 
+static void Survival_DrawHeart(int x, int y, int points) {
+	static const cc_uint8 outer[6] = { 0x66, 0xFF, 0xFF, 0x7E, 0x3C, 0x18 };
+	static const cc_uint8 inner[4] = { 0x33, 0x3F, 0x3F, 0x1E };
+	PackedCol border = PackedCol_Make(18, 12, 16, 255);
+	PackedCol empty  = PackedCol_Make(74, 49, 54, 255);
+	PackedCol full   = PackedCol_Make(222, 45, 55, 255);
+	Survival_DrawPixelMask(x, y, outer, 8, 6, border, 8);
+	Survival_DrawPixelMask(x + 2, y + 2, inner, 6, 4, points > 0 ? full : empty, points == 1 ? 3 : 6);
+}
+
+static void Survival_DrawFoodIcon(int x, int y, int points) {
+	static const cc_uint8 outer[8] = { 0x18, 0x3C, 0x7E, 0x7E, 0x7E, 0x3C, 0x24, 0x42 };
+	static const cc_uint8 inner[6] = { 0x0C, 0x1E, 0x3F, 0x3F, 0x1E, 0x0C };
+	PackedCol border = PackedCol_Make(25, 18, 10, 255);
+	PackedCol empty  = PackedCol_Make(79, 61, 42, 255);
+	PackedCol full   = PackedCol_Make(208, 151, 72, 255);
+	Survival_DrawPixelMask(x, y, outer, 8, 8, border, 8);
+	Survival_DrawPixelMask(x + 2, y + 2, inner, 6, 6, points > 0 ? full : empty, points == 1 ? 3 : 6);
+}
+
+static void Survival_DrawAirBubble(int x, int y) {
+	static const cc_uint8 bubble[4] = { 0x6, 0xF, 0xF, 0x6 };
+	Survival_DrawPixelMask(x, y, bubble, 4, 4, PackedCol_Make(45, 120, 200, 255), 4);
+}
+
 static void Survival_RenderHUD(float delta) {
-	int y, foodX;
+	int i, y, foodX;
 	(void)delta;
-	PackedCol healthCol = PackedCol_Make(210, 45, 45, 255);
-	PackedCol foodCol = PackedCol_Make(222, 158, 45, 255);
-	PackedCol airCol = PackedCol_Make(65, 150, 220, 255);
 	if (!Survival_Active() || Game_HideGui) return;
 	y = Game.Height - 54;
 	if (y < 4) y = 4;
-	foodX = Game.Width - 114;
-	if (foodX < 12) foodX = 12;
-	Survival_DrawMeter(12, y, health, healthCol);
-	Survival_DrawMeter(foodX, y, food, foodCol);
+
+	/* Minecraft-style 10-heart health row and 10-piece hunger row. */
+	for (i = 0; i < 10; i++) {
+		Survival_DrawHeart(12 + i * 18, y, max(0, min(2, health - i * 2)));
+	}
+	foodX = Game.Width - 12 - 10 * 18;
+	for (i = 0; i < 10; i++) {
+		Survival_DrawFoodIcon(foodX + i * 18, y, max(0, min(2, food - i * 2)));
+	}
+
 	if (airSeconds < SURVIVAL_MAX_AIR) {
-		int airValue = (int)((airSeconds / SURVIVAL_MAX_AIR) * 20.0f + 0.5f);
-		Survival_DrawMeter((Game.Width - 100) / 2, y - 13, airValue, airCol);
+		int bubbles = (int)((airSeconds / SURVIVAL_MAX_AIR) * 10.0f + 0.5f);
+		int airX = (Game.Width - 10 * 12) / 2;
+		for (i = 0; i < bubbles; i++) Survival_DrawAirBubble(airX + i * 12, y - 14);
 	}
 	if (miningActive) {
 		int barX = (Game.Width - 66) / 2;
