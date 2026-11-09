@@ -36,6 +36,9 @@ static struct ScheduledTask2 survivalTask;
 static float hostileSpawnTimer;
 static int itemCounts[BLOCK_COUNT];
 static int toolDurability[BLOCK_COUNT];
+static BlockID furnaceOutput;
+static int furnaceQueued;
+static float furnaceProgress, furnaceFuelSeconds;
 static RNGState survivalRng;
 static cc_bool miningActive;
 static int miningX, miningY, miningZ;
@@ -813,6 +816,7 @@ static void Survival_OnNewMap(void) {
 	hostileSpawnTimer = 0.0f;
 	Survival_Reset();
 	Mem_Set(survivalCrops, 0, sizeof(survivalCrops));
+	Survival_FurnaceReset();
 	timeOfDay = 0.0f;
 	dayCycleStep = -1;
 	SurvivalItem_ClearAll();
@@ -842,7 +846,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18];
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 11];
 	cc_uint16 dayTicks;
 	int i, itemTypes = 0, droppedCount = 0, offset = 14;
 	cc_result res;
@@ -854,7 +858,7 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		if (itemCounts[i] > 0) itemTypes++;
 	}
 	data[0] = 'C'; data[1] = 'C'; data[2] = 'S'; data[3] = 'V';
-	data[4] = 5;
+	data[4] = 6;
 	data[5] = (cc_uint8)max(0, min(health, SURVIVAL_MAX_HEALTH));
 	data[6] = (cc_uint8)max(0, min(food, SURVIVAL_MAX_FOOD));
 	data[7] = (cc_uint8)max(0, min((int)(airSeconds + 0.5f), 15));
@@ -911,6 +915,18 @@ cc_result Survival_Save(const cc_string* mapPath) {
 		data[offset++] = (cc_uint8)(bits & 0xFF); data[offset++] = (cc_uint8)((bits >> 8) & 0xFF);
 		data[offset++] = (cc_uint8)((bits >> 16) & 0xFF); data[offset++] = (cc_uint8)(bits >> 24);
 	}
+	data[offset++] = (cc_uint8)furnaceQueued;
+	data[offset++] = (cc_uint8)(furnaceOutput & 0xFF);
+	data[offset++] = (cc_uint8)(furnaceOutput >> 8);
+	{
+		cc_uint32 bits;
+		Mem_Copy(&bits, &furnaceProgress, sizeof(bits));
+		data[offset++] = (cc_uint8)bits; data[offset++] = (cc_uint8)(bits >> 8);
+		data[offset++] = (cc_uint8)(bits >> 16); data[offset++] = (cc_uint8)(bits >> 24);
+		Mem_Copy(&bits, &furnaceFuelSeconds, sizeof(bits));
+		data[offset++] = (cc_uint8)bits; data[offset++] = (cc_uint8)(bits >> 8);
+		data[offset++] = (cc_uint8)(bits >> 16); data[offset++] = (cc_uint8)(bits >> 24);
+	}
 
 	Platform_EncodePath(&rawPath, &path);
 	res = Stream_CreatePath(&stream, &rawPath);
@@ -928,8 +944,8 @@ cc_result Survival_Load(const cc_string* mapPath) {
 	cc_filepath rawPath;
 	cc_string path;
 	char pathBuffer[FILENAME_SIZE];
-	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 16];
-	cc_uint32 payloadSize, droppedOffset;
+	cc_uint8 data[14 + BLOCK_COUNT * 6 + INVENTORY_HOTBARS * INVENTORY_BLOCKS_PER_HOTBAR * 2 + 1 + SURVIVAL_ITEM_SLOTS * 18 + 11];
+	cc_uint32 payloadSize, droppedOffset, furnaceOffset;
 	int i, offset, stackSlots = 0, droppedCount = 0;
 	cc_result res;
 
@@ -950,7 +966,7 @@ cc_result Survival_Load(const cc_string* mapPath) {
 		return res;
 	}
 	if (data[0] != 'C' || data[1] != 'C' || data[2] != 'S' || data[3] != 'V' ||
-		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
+		(data[4] != 1 && data[4] != 2 && data[4] != 3 && data[4] != 4 && data[4] != 5 && data[4] != 6) || data[9] > SURVIVAL_INVENTORY_SLOTS ||
 		data[10] > HOTBAR_MAX_INDEX || data[11] >= INVENTORY_HOTBARS) {
 		stream.Close(&stream);
 		return ERR_INVALID_ARGUMENT;
@@ -983,8 +999,38 @@ cc_result Survival_Load(const cc_string* mapPath) {
 			}
 		}
 	}
+	furnaceOffset = droppedOffset + (data[4] >= 4 ? 1U + (cc_uint32)droppedCount * (data[4] >= 5 ? 18U : 16U) : 0U);
+	if (data[4] >= 6) {
+		res = Stream_Read(&stream, data + furnaceOffset, 11);
+		if (res) {
+			stream.Close(&stream);
+			return res;
+		}
+	}
 	res = stream.Close(&stream);
 	if (res) return res;
+
+	Survival_FurnaceReset();
+	if (data[4] >= 6) {
+		cc_uint32 bits;
+		cc_uint16 savedOutput;
+		furnaceQueued = data[furnaceOffset];
+		savedOutput = (cc_uint16)(data[furnaceOffset + 1] | ((cc_uint16)data[furnaceOffset + 2] << 8));
+		bits = (cc_uint32)data[furnaceOffset + 3] | ((cc_uint32)data[furnaceOffset + 4] << 8) |
+			((cc_uint32)data[furnaceOffset + 5] << 16) | ((cc_uint32)data[furnaceOffset + 6] << 24);
+		Mem_Copy(&furnaceProgress, &bits, sizeof(bits));
+		bits = (cc_uint32)data[furnaceOffset + 7] | ((cc_uint32)data[furnaceOffset + 8] << 8) |
+			((cc_uint32)data[furnaceOffset + 9] << 16) | ((cc_uint32)data[furnaceOffset + 10] << 24);
+		Mem_Copy(&furnaceFuelSeconds, &bits, sizeof(bits));
+		if (furnaceQueued > 16 || (furnaceQueued && !Survival_FurnaceOutputValid((BlockID)savedOutput)) ||
+			furnaceProgress != furnaceProgress || furnaceFuelSeconds != furnaceFuelSeconds ||
+			furnaceProgress < 0.0f || furnaceProgress >= 10.0f ||
+			furnaceFuelSeconds < 0.0f || furnaceFuelSeconds > 1280.0f) {
+			Survival_FurnaceReset();
+		} else {
+			furnaceOutput = furnaceQueued ? (BlockID)savedOutput : BLOCK_AIR;
+		}
+	}
 
 	Mem_Set(itemCounts, 0, sizeof(itemCounts));
 	Mem_Set(toolDurability, 0, sizeof(toolDurability));
@@ -1196,6 +1242,7 @@ static cc_bool Survival_Tick(struct ScheduledTask2* task) {
 	if (!Survival_IsActive()) return true;
 	Survival_UpdateDayNight(dt);
 	Survival_CropTick(dt);
+	Survival_FurnaceTick(dt);
 	if (Survival_IsNight()) {
 		hostileSpawnTimer += dt;
 		if (hostileSpawnTimer >= 12.0f && SurvivalMob_Count(true) < 5) {
@@ -1342,6 +1389,90 @@ static cc_bool Survival_NearBlock(BlockID block) {
 	return false;
 }
 
+
+static void Survival_FurnaceReset(void) {
+	furnaceOutput = BLOCK_AIR;
+	furnaceQueued = 0;
+	furnaceProgress = 0.0f;
+	furnaceFuelSeconds = 0.0f;
+}
+
+static cc_bool Survival_FurnaceOutputValid(BlockID output) {
+	return output == BLOCK_ITEM_IRON_INGOT || output == BLOCK_ITEM_GOLD_INGOT ||
+		output == BLOCK_ITEM_COOKED_PORK || output == BLOCK_ITEM_COOKED_BEEF ||
+		output == BLOCK_ITEM_COOKED_CHICKEN;
+}
+
+static cc_bool Survival_StartFurnaceJob(BlockID input, BlockID output) {
+	int neededFuel;
+	if (!Survival_NearBlock(BLOCK_ITEM_FURNACE)) {
+		Chat_AddRaw("&eYou need a nearby furnace.");
+		return false;
+	}
+	if (!Survival_FurnaceOutputValid(output)) return false;
+	if (furnaceQueued && furnaceOutput != output) {
+		Chat_AddRaw("&eFinish the current furnace output before starting a different recipe.");
+		return false;
+	}
+	if (furnaceQueued >= 16) {
+		Chat_AddRaw("&eThe furnace queue is full.");
+		return false;
+	}
+	if (Survival_GetItemCount(input) < 1) {
+		Chat_AddRaw("&eYou don't have the required furnace input.");
+		return false;
+	}
+
+	/* Coal burns for 80 seconds. Keep enough fuel for all queued items. */
+	neededFuel = (furnaceQueued + 1) * 10;
+	if (furnaceFuelSeconds < (float)neededFuel - furnaceProgress) {
+		if (Survival_GetItemCount(BLOCK_ITEM_COAL) < 1) {
+			Chat_AddRaw("&eThe furnace needs coal.");
+			return false;
+		}
+		if (Survival_InventoryRemove(BLOCK_ITEM_COAL, 1) != 1) return false;
+		furnaceFuelSeconds += 80.0f;
+	}
+	if (Survival_InventoryRemove(input, 1) != 1) return false;
+	if (!furnaceQueued) furnaceOutput = output;
+	furnaceQueued++;
+	Chat_AddRaw("&aAdded one item to the furnace queue.");
+	return true;
+}
+
+static void Survival_FurnaceTick(float delta) {
+	int added;
+	Vec3 position;
+	if (furnaceQueued <= 0 || furnaceFuelSeconds <= 0.0f || delta <= 0.0f) return;
+
+	furnaceFuelSeconds -= delta;
+	if (furnaceFuelSeconds < 0.0f) {
+		delta += furnaceFuelSeconds;
+		furnaceFuelSeconds = 0.0f;
+	}
+	if (delta <= 0.0f) return;
+	furnaceProgress += delta;
+	if (furnaceProgress < 10.0f) return;
+
+	furnaceProgress -= 10.0f;
+	furnaceQueued--;
+	added = Survival_InventoryAdd(furnaceOutput, 1);
+	if (added <= 0) {
+		if (Entities.CurPlayer) {
+			position = Entities.CurPlayer->Base.Position;
+		} else {
+			Vec3_Set(position, 0.0f, 0.0f, 0.0f);
+		}
+		SurvivalItem_Spawn(furnaceOutput, 1, position);
+	}
+	Chat_AddRaw("&aThe furnace finished one item.");
+	if (furnaceQueued <= 0) {
+		furnaceQueued = 0;
+		furnaceOutput = BLOCK_AIR;
+		furnaceProgress = 0.0f;
+	}
+}
+
 static cc_bool Survival_CraftRecipe(BlockID inputA, int amountA, BlockID inputB, int amountB,
 	BlockID output, int amountOut, BlockID station) {
 	int added;
@@ -1390,6 +1521,7 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 		Chat_AddRaw("&a/craft bread &7- 3 wheat");
 		Chat_AddRaw("&aUse hoes on dirt/grass, then plant seeds on farmland.");
 		Chat_AddRaw("&a/craft smelt_iron|smelt_gold|cook_pork|cook_beef|cook_chicken");
+		Chat_AddRaw("&aFurnace jobs take 10 seconds each; one coal fuels 8 jobs.");
 		return;
 	}
 	recipe = &args[0];
@@ -1436,15 +1568,15 @@ static void SurvivalCraftCommand_Execute(const cc_string* args, int argsCount) {
 	} else if (String_CaselessEqualsConst(recipe, "iron_sword")) {
 		Survival_CraftRecipe(BLOCK_ITEM_IRON_INGOT, 2, BLOCK_ITEM_STICK, 1, BLOCK_ITEM_IRON_SWORD, 1, BLOCK_ITEM_CRAFTING_TABLE);
 	} else if (String_CaselessEqualsConst(recipe, "smelt_iron")) {
-		Survival_CraftRecipe(BLOCK_ITEM_IRON_ORE, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_IRON_INGOT, 1, BLOCK_ITEM_FURNACE);
+		Survival_StartFurnaceJob(BLOCK_ITEM_IRON_ORE, BLOCK_ITEM_IRON_INGOT);
 	} else if (String_CaselessEqualsConst(recipe, "smelt_gold")) {
-		Survival_CraftRecipe(BLOCK_ITEM_GOLD_ORE, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_GOLD_INGOT, 1, BLOCK_ITEM_FURNACE);
+		Survival_StartFurnaceJob(BLOCK_ITEM_GOLD_ORE, BLOCK_ITEM_GOLD_INGOT);
 	} else if (String_CaselessEqualsConst(recipe, "cook_pork")) {
-		Survival_CraftRecipe(BLOCK_ITEM_RAW_PORK, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_PORK, 1, BLOCK_ITEM_FURNACE);
+		Survival_StartFurnaceJob(BLOCK_ITEM_RAW_PORK, BLOCK_ITEM_COOKED_PORK);
 	} else if (String_CaselessEqualsConst(recipe, "cook_beef")) {
-		Survival_CraftRecipe(BLOCK_ITEM_RAW_BEEF, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_BEEF, 1, BLOCK_ITEM_FURNACE);
+		Survival_StartFurnaceJob(BLOCK_ITEM_RAW_BEEF, BLOCK_ITEM_COOKED_BEEF);
 	} else if (String_CaselessEqualsConst(recipe, "cook_chicken")) {
-		Survival_CraftRecipe(BLOCK_ITEM_RAW_CHICKEN, 1, BLOCK_ITEM_COAL, 1, BLOCK_ITEM_COOKED_CHICKEN, 1, BLOCK_ITEM_FURNACE);
+		Survival_StartFurnaceJob(BLOCK_ITEM_RAW_CHICKEN, BLOCK_ITEM_COOKED_CHICKEN);
 	} else {
 		Chat_AddRaw("&eUnknown recipe. Use /client craft help.");
 	}
@@ -1919,11 +2051,13 @@ static void Survival_ComponentReset(void) {
 	/* Remove local Survival entities before switching maps or game modes. */
 	SurvivalMob_ClearAll();
 	SurvivalItem_ClearAll();
+	Survival_FurnaceReset();
 	Survival_Reset();
 }
 
 static void Survival_Init(void) {
 	Random_Seed(&survivalRng, (int)Stopwatch_Measure());
+	Survival_FurnaceReset();
 	Survival_Reset();
 	Commands_Register(&SurvivalCraftCommand);
 	timeOfDay = 0.0f;
