@@ -1,51 +1,52 @@
 # Playing the ClassiCube Survival prototype
 
-This guide describes the current source branch. The code still needs a successful Windows build and in-game verification before it can be called a finished playable release.
-
-## Starting a world
-
-1. Launch a build of this fork.
-2. Choose Singleplayer and create or load a world.
-3. Use the normal non-Classic game mode. Survival does not run in Classic mode or multiplayer.
-4. When the world loads, the survival meters appear and a few passive animals spawn nearby.
+This guide describes the current Survival branch. Use a normal singleplayer world; Survival is disabled in Classic mode and multiplayer.
 
 ## Controls
 
 - **WASD** — move.
 - **Space** — jump.
-- **Left mouse button (hold)** — mine the selected block; the progress bar fills while held. Block drops appear in the world.
-- **Walk close to drops** — collect block and mob items.
+- **Left mouse button (hold)** — mine the selected block; the progress bar fills while held.
 - **Left mouse button** — attack a nearby mob.
-- **Right mouse button** — place the selected block or eat the selected food.
+- **Right mouse button** — place the selected block, eat selected food, till soil with a hoe, or plant seeds.
+- **Walk close to drops** — collect block and mob items.
 - **T** — open chat.
 - **B** — open the inventory picker (default ClassiCube inventory binding).
 - **1–9** — select a hotbar slot.
 
-Use the existing Controls menu to change bindings.
+Food can be eaten with right-click even when you are looking at empty air.
 
-## Crafting
+## First Survival progression
 
-Open chat and enter `/client craft help` to see the recipes.
+1. Break a tree log and enter `/client craft planks`.
+2. Enter `/client craft sticks`.
+3. Enter `/client craft table`, then place your crafting table.
+4. Craft a wooden pickaxe with `/client craft wooden_pickaxe` and mine stone.
+5. Craft a stone pickaxe and then a furnace with `/client craft furnace`.
+6. Mine coal and iron ore. Use `/client craft smelt_iron` near a furnace to get iron ingots.
+7. Use `/client craft iron_pickaxe` near a crafting table for the iron pickaxe.
 
-Common starting progression:
+## Farming and bread
 
-1. Mine tree logs.
-2. Enter `/client craft planks` to make planks.
-3. Enter `/client craft sticks` to make sticks.
-4. Enter `/client craft table`, then place the crafting table.
-5. Mine stone and make a furnace with `/client craft furnace`.
-6. Use `/client craft wooden_pickaxe`, `/client craft stone_pickaxe`, and later `/client craft iron_pickaxe` near a crafting table.
-7. Mine coal, iron ore and gold ore with the required pickaxe tier.
-8. Use `/client craft smelt_iron` or `/client craft smelt_gold` near a furnace. These commands consume coal immediately.
-9. Use `/client craft cook_pork`, `/client craft cook_beef` or `/client craft cook_chicken` near a furnace to cook meat.
-10. Use `/client craft wooden_sword`, `/client craft stone_sword` or `/client craft iron_sword` near a crafting table to improve melee damage.
+1. Break dandelion flowers to collect seeds.
+2. Enter `/client craft wooden_hoe` (or craft a stone/iron hoe).
+3. Hold the hoe and right-click a dirt or grass block with clear space above it to make farmland.
+4. Place water within four blocks of the farmland to improve crop growth.
+5. Select seeds and right-click the top of the farmland to plant them.
+6. Crops grow in sunlight. Each stage takes about 90 in-game seconds near water or 180 seconds without nearby water.
+7. Break mature wheat to collect wheat and more seeds.
+8. Enter `/client craft bread` near a crafting table to turn three wheat into bread.
 
-Food is used by selecting it in the hotbar and right-clicking. The inventory picker and hotbar show stack counts.
+## Food, combat and death
 
-## Saving
+Select food in your hotbar and right-click to eat. Pigs and chickens provide meat; sheep provide wool. Hostile mobs appear at night. Zombies and skeletons burn in direct daylight unless sheltered. If you die, your inventory drops at the death location; return after respawning to collect it. Lava destroys dropped items.
 
-Use ClassiCube's normal pause/save-level flow to save a map. The fork writes a companion `.survival` file beside the map to preserve player state, inventory, tools, day/night time and dropped item stacks. Keep that companion file with the map when moving it to another computer.
+## Crafting and saving
+
+Enter `/client craft help` in chat to see all recipes. Smelting/cooking commands currently consume coal immediately rather than running a timed furnace interface.
+
+Use ClassiCube's normal pause/save-level flow. Keep the companion `.survival` file beside its map file when moving a world to another computer. Crop stages and placed farmland are saved in the map; the crop's partial growth timer restarts when the map is loaded.
 
 ## Known differences
 
-This is an early Survival implementation, not a complete Beta 1.7.3 port. It still lacks infinite Beta terrain and biomes, a full crafting-grid interface, a timed furnace UI, armor, breeding, some animals, full item physics/merge behavior, and other Beta features. Dropped items are limited to 32 simultaneous stacks and despawn after five minutes. The Windows build and gameplay still need verification.
+This is still an early Survival port, not a complete Beta 1.7.3 recreation. It uses finite ClassiCube worlds, command-based crafting, an instant furnace recipe system, simplified mob AI, and placeholder Classic textures for some farming items. Armor, bows, creeper explosions, cows, breeding, infinite terrain and Beta biomes are not implemented yet. The Windows clients compile, but still need play-testing on the target PC.
