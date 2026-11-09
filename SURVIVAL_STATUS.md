@@ -38,7 +38,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - Chat command: `/client craft help`.
 - Recipes include planks, sticks, crafting table, furnace, torches, wooden/stone/iron tools and swords, hoes, bread, ingots and cooked meat.
 - Crafting recipes check for a nearby crafting table or furnace where required.
-- Smelting/cooking commands currently consume one coal immediately; there is not yet a timed furnace interface.
+- Smelting/cooking recipes now run as timed jobs: each item takes 10 seconds and one coal provides 80 seconds of fuel. Up to 16 jobs of the same output type can be queued. Fuel and progress survive save/load. There is still no graphical furnace interface.
 
 ### World and mobs
 - The existing ClassiCube Notchy generator creates a finite noise-based world with hills, caves, ores, water, flowers and trees. Normal Survival worlds use 128 × 128 horizontal dimensions and 128-block height on standard builds.
@@ -50,8 +50,8 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 
 ### Saving
 - The map stores placed blocks and crop growth stages in the normal ClassiCube map data.
-- A companion `.survival` sidecar stores health, hunger, air, inventory stacks, tool durability, hotbar layout, day/night time, and up to 40 dropped item stacks with positions and tool durability.
-- Sidecar version 5 reads versions 1–4 as well.
+- A companion `.survival` sidecar stores health, hunger, air, inventory stacks, tool durability, hotbar layout, day/night time, dropped item stacks with positions/durability, and the furnace queue/fuel/progress.
+- Sidecar version 6 reads versions 1–5 as well.
 - Keep the `.survival` sidecar beside its map when moving the world.
 
 ## Still missing compared with Minecraft Beta 1.7.3
