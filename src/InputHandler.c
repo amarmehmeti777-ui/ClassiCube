@@ -434,12 +434,14 @@ static void InputHandler_DeleteBlock(float elapsed) {
 static void InputHandler_PlaceBlock(void) {
 	IVec3 pos;
 	BlockID old, block;
+	block = Inventory_SelectedBlock;
+	/* Food must be usable even when the crosshair is not pointing at a block. */
+	if (Survival_UseItem(block)) return;
+
 	pos = Game_SelectedPos.translatedPos;
 	if (!Game_SelectedPos.valid || !World_Contains(pos.x, pos.y, pos.z)) return;
 
-	old   = World_GetBlock(pos.x, pos.y, pos.z);
-	block = Inventory_SelectedBlock;
-	if (Survival_UseItem(block)) return;
+	old = World_GetBlock(pos.x, pos.y, pos.z);
 	if (AutoRotate_Enabled) block = AutoRotate_RotateBlock(block);
 
 	if (Game_CanPick(old) || !Blocks.CanPlace[block]) return;
