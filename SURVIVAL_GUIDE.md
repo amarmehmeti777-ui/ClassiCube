@@ -43,9 +43,7 @@ Craft a bed with `/client craft bed` (three wool and three planks) near a crafti
 
 ## Armor, food, combat and death
 
-Craft iron armor with `/client craft iron_helmet`, `/client craft iron_chestplate`, `/client craft iron_leggings` and `/client craft iron_boots` near a crafting table. Select each piece in the hotbar and right-click to equip it. The armor row appears above the hearts. Armor reduces damage from hostile mobs and wears down when hit. If you die, equipped armor drops with your other inventory items.
-
-## Food, combat and death
+Craft iron armor with `/client craft iron_helmet`, `/client craft iron_chestplate`, `/client craft iron_leggings` and `/client craft iron_boots`, or craft gold armor with the matching `gold_` recipes, near a crafting table. Gold armor is less durable and offers less protection than iron. Select each piece in the hotbar and right-click to equip it. The armor row appears above the hearts. Armor reduces damage from hostile mobs and falls and wears down when hit. If you die, equipped armor drops with your other inventory items.
 
 Select food in your hotbar and right-click to eat. Pigs and chickens provide meat; sheep provide wool. Hostile mobs appear at night. Zombies and skeletons burn in direct daylight unless sheltered. If you die, your inventory drops at the death location; return after respawning to collect it. Lava destroys dropped items.
 
@@ -57,4 +55,4 @@ Use ClassiCube's normal pause/save-level flow. Keep the version 8 companion `.su
 
 ## Known differences
 
-This is still an early Survival port, not a complete Beta 1.7.3 recreation. It uses finite ClassiCube worlds, command-based crafting, an instant furnace recipe system, simplified mob AI, and placeholder Classic textures for some farming items. Armor, bows, creeper explosions, cows, breeding, infinite terrain and Beta biomes are not implemented yet. The Windows clients compile, but still need play-testing on the target PC.
+This is still an early Survival port, not a complete Beta 1.7.3 recreation. It uses finite ClassiCube worlds, command-based crafting, an instant furnace recipe system, simplified mob AI, and placeholder Classic textures for some farming items. Leather/chain armor, bows, cows, breeding, infinite terrain and Beta biomes are not implemented yet. The Windows clients compile, but still need play-testing on the target PC.
