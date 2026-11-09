@@ -1660,6 +1660,100 @@ static void PigModel_Register(void) {
 	Model_Register(&pig_model);
 }
 
+/*########################################################################################################################*
+*----------------------------------------------------------CowModel-------------------------------------------------------*
+*#########################################################################################################################*/
+static struct ModelPart cow_head, cow_torso, cow_leftLegFront, cow_rightLegFront;
+static struct ModelPart cow_leftLegBack, cow_rightLegBack, cow_hornLeft, cow_hornRight;
+#define COW_MAX_VERTICES (8 * MODEL_BOX_VERTICES)
+
+static void CowModel_MakeParts(void) {
+	static const struct BoxDesc head = {
+		BoxDesc_Tex(0,0),
+		BoxDesc_Box(-4,12,-16, 4,20,-8),
+		BoxDesc_Rot(0,14,-8),
+	};
+	static const struct BoxDesc torso = {
+		BoxDesc_Tex(18,4),
+		BoxDesc_Box(-6,6,-8, 6,18,8),
+		BoxDesc_Rot(0,6,0),
+	};
+	static const struct BoxDesc lFront = {
+		BoxDesc_Tex(0,16),
+		BoxDesc_Box(-5,0,-7, -1,6,-3),
+		BoxDesc_Rot(0,6,-5),
+	};
+	static const struct BoxDesc rFront = {
+		BoxDesc_Tex(0,16),
+		BoxDesc_Box(1,0,-7, 5,6,-3),
+		BoxDesc_Rot(0,6,-5),
+	};
+	static const struct BoxDesc lBack = {
+		BoxDesc_Tex(0,16),
+		BoxDesc_Box(-5,0,5, -1,6,9),
+		BoxDesc_Rot(0,6,7),
+	};
+	static const struct BoxDesc rBack = {
+		BoxDesc_Tex(0,16),
+		BoxDesc_Box(1,0,5, 5,6,9),
+		BoxDesc_Rot(0,6,7),
+	};
+	static const struct BoxDesc hornLeft = {
+		BoxDesc_Tex(0,0),
+		BoxDesc_Box(-5,18,-13, -3,22,-11),
+		BoxDesc_Rot(0,18,-12),
+	};
+	static const struct BoxDesc hornRight = {
+		BoxDesc_Tex(0,0),
+		BoxDesc_Box(3,18,-13, 5,22,-11),
+		BoxDesc_Rot(0,18,-12),
+	};
+
+	BoxDesc_BuildBox(&cow_head, &head);
+	BoxDesc_BuildRotatedBox(&cow_torso, &torso);
+	BoxDesc_BuildBox(&cow_leftLegFront, &lFront);
+	BoxDesc_BuildBox(&cow_rightLegFront, &rFront);
+	BoxDesc_BuildBox(&cow_leftLegBack, &lBack);
+	BoxDesc_BuildBox(&cow_rightLegBack, &rBack);
+	BoxDesc_BuildBox(&cow_hornLeft, &hornLeft);
+	BoxDesc_BuildBox(&cow_hornRight, &hornRight);
+}
+
+static void CowModel_Draw(struct Entity* e) {
+	Model_ApplyTexture(e);
+	Model_LockVB(e, COW_MAX_VERTICES);
+	Model_DrawRotate(-e->Pitch * MATH_DEG2RAD, 0, 0, &cow_head, true);
+	Model_DrawPart(&cow_torso);
+	Model_DrawRotate(e->Anim.LeftArmX, 0, 0, &cow_hornLeft, false);
+	Model_DrawRotate(e->Anim.RightArmX, 0, 0, &cow_hornRight, false);
+	Model_DrawRotate(e->Anim.LeftLegX, 0, 0, &cow_leftLegFront, false);
+	Model_DrawRotate(e->Anim.RightLegX, 0, 0, &cow_rightLegFront, false);
+	Model_DrawRotate(e->Anim.RightLegX, 0, 0, &cow_leftLegBack, false);
+	Model_DrawRotate(e->Anim.LeftLegX, 0, 0, &cow_rightLegBack, false);
+	Model_UnlockVB();
+	Gfx_DrawVb_IndexedTris(COW_MAX_VERTICES);
+}
+
+static float CowModel_GetNameY(struct Entity* e) { return 1.3f; }
+static float CowModel_GetEyeY(struct Entity* e)  { return 16.0f/16.0f; }
+static void CowModel_GetSize(struct Entity* e)   { Model_RetSize(18.0f,22.0f,24.0f); }
+static void CowModel_GetBounds(struct Entity* e) { Model_RetAABB(-7,0,-16, 7,22,9); }
+
+static struct ModelVertex cow_vertices[MODEL_BOX_VERTICES * 8];
+static struct ModelTex cow_tex = { "cow.png" };
+static struct Model cow_model  = { "cow", cow_vertices, &cow_tex,
+	CowModel_MakeParts, CowModel_Draw,
+	CowModel_GetNameY, CowModel_GetEyeY,
+	CowModel_GetSize, CowModel_GetBounds
+};
+
+static void CowModel_Register(void) {
+	Model_Init(&cow_model);
+	cow_model.maxVertices = COW_MAX_VERTICES;
+	Model_Register(&cow_model);
+}
+
+
 
 /*########################################################################################################################*
 *---------------------------------------------------------SheepModel------------------------------------------------------*
@@ -2386,6 +2480,7 @@ static void RegisterDefaultModels(void) {
 	Model_RegisterTexture(&chicken_tex);
 	Model_RegisterTexture(&creeper_tex);
 	Model_RegisterTexture(&pig_tex);
+	Model_RegisterTexture(&cow_tex);
 	Model_RegisterTexture(&sheep_tex);
 	Model_RegisterTexture(&fur_tex);
 	Model_RegisterTexture(&skeleton_tex);
@@ -2403,6 +2498,7 @@ static void RegisterDefaultModels(void) {
 	ChickenModel_Register();
 	CreeperModel_Register();
 	PigModel_Register();
+	CowModel_Register();
 	SheepModel_Register();
 	NoFurModel_Register();
 	SkeletonModel_Register();
