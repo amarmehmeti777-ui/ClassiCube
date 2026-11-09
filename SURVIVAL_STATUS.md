@@ -26,7 +26,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - A fixed 40-entity dropped-item pool; nearby same-item stacks merge, drops despawn after five minutes, and lava destroys them.
 - Tool durability is retained when a tool is dropped and collected.
 - Block placement consumes an item from the inventory.
-- Local Survival items include food, seeds, wheat, sticks, coal, ingots, crafting table, furnace, torches, hoes, shears, pickaxes, axes, shovels, swords, iron and gold armor, and mob drops.
+- Local Survival items include food, seeds, wheat, sticks, coal, ingots, leather, crafting table, furnace, torches, hoes, shears, pickaxes, axes, shovels, swords, leather/iron/gold armor and mob drops.
 
 ### Farming
 - Dandelion flowers can drop seeds.
@@ -46,7 +46,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 ### World and mobs
 - The existing ClassiCube Notchy generator creates finite noise-based worlds with hills, caves, ores, water, flowers, trees, and broad desert, tundra and forest regions. Deserts use sand surfaces, tundra gets a snow layer, and forests grow denser trees. Normal Survival worlds use 128 × 128 horizontal dimensions and 128-block height on standard builds.
 - A 20-minute day/night cycle adjusts sky, fog and sunlight colours.
-- Passive pigs, chickens and sheep spawn when a world loads and wander.
+- Passive pigs, chickens, sheep and cows spawn when a world loads and wander. Cows drop beef and leather.
 - Zombies, skeletons, creepers and spiders can spawn at night and pursue the player. Zombies, skeletons and spiders attack at close range. Creepers pause and hiss with a 1.5-second fuse, then damage nearby players and break nearby non-bedrock blocks.
 - Zombies and skeletons burn in direct daylight and are safe under a roof.
 - Shears can be crafted from two iron ingots and used on nearby sheep to collect wool. Sheared sheep regrow wool after grazing grass; grass turns to dirt as they graze. Shears have durability.
@@ -63,7 +63,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 
 - Infinite terrain and Beta biomes; worlds are finite ClassiCube maps.
 - Graphical crafting-grid and furnace interfaces; recipes and furnace jobs are currently controlled through chat commands.
-- Leather/chain armor, armor rendered directly on the player model, bows/projectile combat, cows, breeding, and several other original mob systems. Beds currently use a simple block appearance rather than the two-part Beta bed model.
+- Chain armor, armor rendered directly on the player model, bows/projectile combat, breeding, and several other original mob systems. Beds currently use a simple block appearance rather than the two-part Beta bed model.
 - Exact Beta block/item textures and models for all added items; farmland/crops currently reuse existing Classic textures.
 - Full item physics such as water floating and a complete stack-merging system. The current drop pool is intentionally bounded for old PCs.
 - A full play-test on the target Windows 7 / Intel GMA 950 machine. CI compilation is not the same as testing the game in that environment.
