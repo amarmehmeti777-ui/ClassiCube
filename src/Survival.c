@@ -309,7 +309,7 @@ static void SurvivalItem_Tick(struct Entity* e, float delta) {
 	e->Yaw = Math_ClampAngle(e->Yaw + delta * 90.0f);
 	e->Anim.BobbingModel = Math_SinF((float)Game.Time + item->entityID) * 0.045f;
 
-	if (!player || item->pickupDelay > 0.0f) return;
+	if (!player || Survival_IsDead() || item->pickupDelay > 0.0f) return;
 	dx = player->Base.Position.x - e->Position.x;
 	dy = player->Base.Position.y - e->Position.y;
 	dz = player->Base.Position.z - e->Position.z;
