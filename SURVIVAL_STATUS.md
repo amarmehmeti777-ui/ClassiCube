@@ -46,7 +46,7 @@ This branch adds a lightweight Survival mode to ClassiCube. It runs in normal si
 - The existing ClassiCube Notchy generator creates a finite noise-based world with hills, caves, ores, water, flowers and trees. Normal Survival worlds use 128 × 128 horizontal dimensions and 128-block height on standard builds.
 - A 20-minute day/night cycle adjusts sky, fog and sunlight colours.
 - Passive pigs, chickens and sheep spawn when a world loads and wander.
-- Zombies, skeletons, creepers and spiders can spawn at night, pursue the player and attack at close range.
+- Zombies, skeletons, creepers and spiders can spawn at night and pursue the player. Zombies, skeletons and spiders attack at close range. Creepers pause and hiss with a 1.5-second fuse, then damage nearby players and break nearby non-bedrock blocks.
 - Zombies and skeletons burn in direct daylight and are safe under a roof.
 - Passive mobs drop meat or wool; hostile mobs drop rotten flesh, bones, arrows, gunpowder or string.
 
